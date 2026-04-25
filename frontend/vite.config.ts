@@ -1,10 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-<<<<<<< HEAD
-import path from "path";
-=======
 import { nodePolyfills } from "vite-plugin-node-polyfills";
->>>>>>> 65e87a86fe53cf5d1271775aed34951c2454a04c
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -21,7 +17,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": "/src",
     },
   },
   server: {
