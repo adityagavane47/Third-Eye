@@ -34,16 +34,16 @@ class RiskScore:
 
 # ── Feature Schema ───────────────────────────────────────────────
 FEATURE_NAMES = [
-    "tx_count_24h",           # transaction velocity (last 24h)
-    "avg_gas_multiple",       # avg gas vs base fee ratio
-    "unique_contracts",       # distinct contract addresses called
-    "flash_loan_flag",        # 0/1 — flash loan pattern detected
-    "reentrancy_depth",       # max call depth observed
-    "value_concentration",    # Gini coefficient of ETH flow
-    "cycle_score",            # circular transaction pattern score (0-1)
-    "betweenness_score",      # graph betweenness centrality (0-1)
-    "cross_protocol_flag",    # 0/1 — crosses multiple DeFi protocols
-    "velocity_score",         # normalized tx velocity (0-1)
+    "tx_count_24h",           
+    "avg_gas_multiple",       
+    "unique_contracts",       
+    "flash_loan_flag",        
+    "reentrancy_depth",       
+    "value_concentration",    
+    "cycle_score",            
+    "betweenness_score",      
+    "cross_protocol_flag",   
+    "velocity_score",         
 ]
 
 
