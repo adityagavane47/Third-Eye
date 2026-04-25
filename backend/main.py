@@ -138,13 +138,43 @@ async def get_graph_nodes(limit: int = 500, request: Request = None):
     """
     Fetch wallet nodes and their relationships from Neo4j.
     Returns data formatted for react-force-graph-3d.
-    TODO (Member 3): Implement Cypher query and pagination.
     """
-    # driver = request.app.state.neo4j
-    # async with driver.session() as session:
-    #     result = await session.run("MATCH (w:Wallet) RETURN w LIMIT $limit", limit=limit)
-    #     ...
-    return {"nodes": [], "links": [], "message": "TODO: implement graph query"}
+    driver = request.app.state.neo4j
+    async with driver.session() as session:
+        # 1. Fetch nodes up to the limit
+        nodes_result = await session.run(
+            "MATCH (w:Wallet) RETURN w LIMIT $limit", limit=limit
+        )
+        nodes_data = await nodes_result.data()
+        
+        # Format nodes for the frontend
+        nodes = []
+        addresses = []
+        for record in nodes_data:
+            w = record["w"]
+            address = w.get("address")
+            addresses.append(address)
+            nodes.append({
+                "id": address,
+                "address": address,
+                "label": w.get("label", "unknown"),
+                "riskScore": w.get("risk_score", 0.0),
+                "flagged": w.get("flagged", False),
+                "txCount": w.get("tx_count", 0),
+                "balanceEth": w.get("balance_eth", 0.0)
+            })
+
+        # 2. Fetch edges (links) only between the nodes we just loaded
+        links_result = await session.run(
+            "MATCH (s:Wallet)-[r:SENT_TO]->(t:Wallet) "
+            "WHERE s.address IN $addresses AND t.address IN $addresses "
+            "RETURN s.address AS source, t.address AS target, "
+            "r.tx_hash AS txHash, r.value_eth AS valueEth",
+            addresses=addresses
+        )
+        links_data = await links_result.data()
+
+    return {"nodes": nodes, "links": links_data}
 
 
 @app.post("/api/graph/flag", tags=["Graph"])

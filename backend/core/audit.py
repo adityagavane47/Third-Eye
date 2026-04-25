@@ -1,14 +1,9 @@
 """
-backend/core/audit.py — On-Chain Audit Trail Logger
-Role: Backend Architect (Member 3) — Satark Legacy Placeholder
+backend/core/audit.py — Sentinel Galaxy WORM Audit Trail
+Ported from Satark audit.py (Write-Once-Read-Many compliant logging)
 
-Maintains an immutable audit log of all Sentinel Galaxy detection events,
-shield activations, and forensic reports for compliance and forensics.
-
-Member 3 TODO:
-- Integrate with Neo4j AuditEvent nodes
-- Add webhook emission for real-time dashboard updates
-- Optionally submit audit hashes to Base Sepolia for tamper-evidence
+All entries are append-only JSON lines — no record is ever modified or deleted.
+SHA-256 checksums are computed per entry for tamper detection.
 """
 
 import hashlib
@@ -17,81 +12,131 @@ import logging
 import os
 import time
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
 logger = logging.getLogger("sentinel.audit")
 
-AUDIT_LOG_PATH = Path(os.getenv("AUDIT_LOG_PATH", "logs/audit.jsonl"))
+# ── File Paths ────────────────────────────────────────────────────
+WORM_LOG_FILE = Path(os.getenv("AUDIT_LOG_PATH", "logs/satark_audit_worm.log"))
 
-
+# ── Event Types ───────────────────────────────────────────────────
 class EventType(str, Enum):
-    ANOMALY_DETECTED = "anomaly_detected"
-    FORENSIC_REPORT_GENERATED = "forensic_report_generated"
-    SHIELD_ACTIVATED = "shield_activated"
-    WALLET_BLACKLISTED = "wallet_blacklisted"
-    WALLET_WHITELISTED = "wallet_whitelisted"
-    SYSTEM_STARTUP = "system_startup"
+    # ── Ported from Satark ──────────────────────────────────
+    API_INGESTION           = "API_INGESTION"       # New blockchain data ingested
+    EPOCH_ROTATION          = "EPOCH_ROTATION"       # ML model epoch / weight rotation
+    THREAT_ALERT            = "THREAT_ALERT"         # High-severity threat raised
+
+    # ── Sentinel Galaxy extensions ──────────────────────────
+    ANOMALY_DETECTED        = "ANOMALY_DETECTED"
+    FORENSIC_REPORT         = "FORENSIC_REPORT"
+    SHIELD_ACTIVATED        = "SHIELD_ACTIVATED"
+    WALLET_BLACKLISTED      = "WALLET_BLACKLISTED"
+    WALLET_WHITELISTED      = "WALLET_WHITELISTED"
+    PSI_MATCH               = "PSI_MATCH"
+    SYSTEM_STARTUP          = "SYSTEM_STARTUP"
 
 
+# ── WORM Entry & Checksum ─────────────────────────────────────────
 @dataclass
 class AuditEvent:
-    """Immutable record of a Sentinel Galaxy detection or action."""
+    """Immutable WORM audit record — never modified after creation."""
     event_type: EventType
     wallet_address: str
-    timestamp: float = field(default_factory=time.time)
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     risk_score: float | None = None
     details: dict = field(default_factory=dict)
-    triggered_by: str = "system"           # "system" | "analyst" | "contract"
-    tx_hash: str | None = None             # On-chain tx if shield was activated
-    checksum: str = ""                     # SHA-256 of event payload (set on save)
+    triggered_by: str = "system"        # "system" | "analyst" | "contract" | "celery"
+    tx_hash: str | None = None
+    checksum: str = ""                  # SHA-256 of payload (set on write)
 
     def compute_checksum(self) -> str:
-        """SHA-256 fingerprint of the event payload (excludes checksum field)."""
+        """SHA-256 fingerprint of the entry (excludes checksum field itself)."""
         payload = {k: v for k, v in asdict(self).items() if k != "checksum"}
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, default=str).encode()
         ).hexdigest()
 
 
+# ── Core WORM Writer (Satark Port) ────────────────────────────────
+def write_worm_log(event_type: str, details: dict) -> dict:
+    """
+    Write-Once-Read-Many (WORM) compliant audit log entry.
+    Ported directly from Satark audit.py — all entries are append-only.
+
+    Valid Satark event_types: API_INGESTION, EPOCH_ROTATION, THREAT_ALERT
+    Sentinel Galaxy adds:     ANOMALY_DETECTED, SHIELD_ACTIVATED, PSI_MATCH, etc.
+
+    Args:
+        event_type: String event identifier (use EventType enum values)
+        details:    Arbitrary payload dict to store with the entry
+
+    Returns:
+        The written entry dict (including timestamp)
+    """
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+        "event": event_type,
+        "payload": details,
+        "checksum": hashlib.sha256(
+            json.dumps({"event": event_type, "details": details}, sort_keys=True).encode()
+        ).hexdigest(),
+    }
+    WORM_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(WORM_LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+    logger.info("WORM | %s | %s", event_type, str(details)[:120])
+    return entry
+
+
+# ── High-Level Audit Logger ───────────────────────────────────────
 class AuditLogger:
     """
-    Append-only audit event logger.
-
-    Events are written as JSON lines to disk and (TODO) stored as
-    Neo4j :AuditEvent nodes linked to :Wallet nodes.
+    Structured audit logger for Sentinel Galaxy detection events.
+    Uses write_worm_log() internally for all persistence — guaranteeing
+    WORM compliance and backward compatibility with Satark's log format.
     """
-
-    def __init__(self, log_path: Path = AUDIT_LOG_PATH):
-        self.log_path = log_path
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
     def record(self, event: AuditEvent) -> AuditEvent:
         """
-        Persist an audit event to the JSONL log file.
-
-        Computes checksum before writing so the record is tamper-detectable.
-        Returns the event with checksum populated.
+        Persist a structured AuditEvent to the WORM log.
+        Computes checksum before writing.
         """
         event.checksum = event.compute_checksum()
+        write_worm_log(event.event_type, asdict(event))
 
-        with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(asdict(event), default=str) + "\n")
-
-        logger.info(
-            "AUDIT | %s | %s | risk=%.2f",
-            event.event_type,
-            event.wallet_address,
-            event.risk_score or 0.0,
-        )
-
-        # TODO (Member 3): Also write to Neo4j
+        # TODO (Member 3): Mirror to Neo4j
         # await run_query(
-        #     "CREATE (e:AuditEvent $props)-[:CONCERNS]->(w:Wallet {address: $addr})",
-        #     {"props": asdict(event), "addr": event.wallet_address}
+        #   "CREATE (e:AuditEvent $props)-[:CONCERNS]->(w:Wallet {address: $addr})",
+        #   {"props": asdict(event), "addr": event.wallet_address}
         # )
-
         return event
+
+    # ── Convenience methods ───────────────────────────────────────
+
+    def log_api_ingestion(self, source: str, record_count: int) -> dict:
+        """Satark compat: log a blockchain data ingestion event."""
+        return write_worm_log(EventType.API_INGESTION, {
+            "source": source,
+            "record_count": record_count,
+        })
+
+    def log_epoch_rotation(self, model_version: str, epoch: int) -> dict:
+        """Satark compat: log an ML model epoch rotation event."""
+        return write_worm_log(EventType.EPOCH_ROTATION, {
+            "model_version": model_version,
+            "epoch": epoch,
+        })
+
+    def log_threat_alert(self, wallet: str, risk_score: float, summary: str) -> dict:
+        """Satark compat: log a high-severity threat alert."""
+        return write_worm_log(EventType.THREAT_ALERT, {
+            "wallet_address": wallet,
+            "risk_score": risk_score,
+            "summary": summary,
+        })
 
     def log_anomaly(self, wallet: str, risk_score: float, hints: list[str]) -> AuditEvent:
         event = AuditEvent(
@@ -100,6 +145,9 @@ class AuditLogger:
             risk_score=risk_score,
             details={"risk_hints": hints},
         )
+        # Also emit a THREAT_ALERT if high severity (Satark compat)
+        if risk_score >= 0.75:
+            self.log_threat_alert(wallet, risk_score, hints[0] if hints else "High risk detected")
         return self.record(event)
 
     def log_shield(self, wallet: str, tx_hash: str, triggered_by: str = "system") -> AuditEvent:
@@ -113,12 +161,52 @@ class AuditLogger:
 
     def log_forensic_report(self, wallet: str, report_summary: str) -> AuditEvent:
         event = AuditEvent(
-            event_type=EventType.FORENSIC_REPORT_GENERATED,
+            event_type=EventType.FORENSIC_REPORT,
             wallet_address=wallet,
             details={"summary": report_summary[:500]},
         )
         return self.record(event)
 
+    def log_psi_match(self, wallet: str, matched_signatures: list[str]) -> AuditEvent:
+        event = AuditEvent(
+            event_type=EventType.PSI_MATCH,
+            wallet_address=wallet,
+            details={"signatures": matched_signatures},
+        )
+        return self.record(event)
 
-# Module-level singleton for convenience imports
+    def read_log(self, last_n: int = 100) -> list[dict]:
+        """
+        Read the last N entries from the WORM log (read-only).
+        Verifies checksum on each entry — logs a warning if tampered.
+        """
+        if not WORM_LOG_FILE.exists():
+            return []
+        entries = []
+        with open(WORM_LOG_FILE, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        for line in lines[-last_n:]:
+            try:
+                entry = json.loads(line.strip())
+                # Verify checksum if present
+                stored_checksum = entry.pop("checksum", None)
+                if stored_checksum:
+                    recomputed = hashlib.sha256(
+                        json.dumps(
+                            {"event": entry["event"], "details": entry.get("payload", {})},
+                            sort_keys=True
+                        ).encode()
+                    ).hexdigest()
+                    if recomputed != stored_checksum:
+                        logger.warning("⚠️  Checksum mismatch — log entry may be tampered: %s", line[:80])
+                        entry["_tampered"] = True
+                    else:
+                        entry["checksum"] = stored_checksum
+                entries.append(entry)
+            except json.JSONDecodeError:
+                logger.error("Corrupt log line skipped: %s", line[:80])
+        return entries
+
+
+# ── Module-level singleton ────────────────────────────────────────
 audit_logger = AuditLogger()
