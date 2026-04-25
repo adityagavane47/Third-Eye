@@ -1,113 +1,75 @@
-/**
- * frontend/src/components/Sidebar.tsx — Forensic Intelligence Panel
- * Role: UI/Viz Designer (Member 4)
- */
-
-import { useState } from "react";
-import type { GalaxyNode } from "./Galaxy3D";
-import { useShield } from "../hooks/useShield";
-
-interface ForensicReport {
-  risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | "UNKNOWN";
-  executive_summary: string;
-  threat_narrative: string;
-  recommended_actions: string[];
-  confidence_assessment: string;
-}
+import { Shield, Activity, TrendingUp, LogOut, Zap } from 'lucide-react';
 
 interface SidebarProps {
-  selectedNode: GalaxyNode | null;
-  onClose: () => void;
+  currentPage: 'dashboard' | 'monitor' | 'insights';
+  onPageChange: (page: 'dashboard' | 'monitor' | 'insights') => void;
 }
 
-const RISK_COLORS: Record<string, string> = {
-  LOW: "#4ADE80",
-  MEDIUM: "#FFD700",
-  HIGH: "#FF8C00",
-  CRITICAL: "#FF3B3B",
-  UNKNOWN: "#94A3B8",
-};
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-
-export default function Sidebar({ selectedNode, onClose }: SidebarProps) {
-  const [report, setReport] = useState<ForensicReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const { blacklistWallet, txStatus, txHash, isConnected, connectWallet } = useShield();
-
-  const fetchReport = async () => {
-    if (!selectedNode) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${API_BASE}/api/forensic/report/${selectedNode.address}`);
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
-      setReport(data.report ?? null);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleShield = async () => {
-    if (!selectedNode) return;
-    if (!isConnected) { await connectWallet(); return; }
-    await blacklistWallet(
-      selectedNode.address,
-      selectedNode.riskScore,
-      report?.executive_summary ?? "Flagged by Sentinel Galaxy"
-    );
-  };
-
-  if (!selectedNode) {
-    return (
-      <aside style={styles.sidebar}>
-        <div style={styles.emptyState}>
-          <div style={{ fontSize: 48 }}>🌌</div>
-          <p style={styles.emptyText}>Select a node in the galaxy to begin forensic analysis</p>
-        </div>
-      </aside>
-    );
-  }
-
-  const riskColor = riskToColor(selectedNode.riskScore);
+export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: Shield },
+    { id: 'monitor', label: 'Monitor', icon: Activity },
+    { id: 'insights', label: 'Insights', icon: TrendingUp },
+  ];
 
   return (
-    <aside style={styles.sidebar}>
-      {/* Header */}
-      <div style={styles.header}>
-        <div>
-          <div style={{ ...styles.riskBadge, background: riskColor + "22", border: `1px solid ${riskColor}`, color: riskColor }}>
-            {selectedNode.flagged ? "🚨 FLAGGED" : `RISK ${(selectedNode.riskScore * 100).toFixed(1)}%`}
-          </div>
-          <h2 style={styles.walletAddress}>
-            {selectedNode.address.slice(0, 10)}…{selectedNode.address.slice(-8)}
-          </h2>
-          <span style={styles.labelBadge}>{selectedNode.label.toUpperCase()}</span>
+    <div className="w-64 bg-cyber-900 border-r border-cyber-700/50 flex flex-col p-6 shadow-lg">
+      {/* Logo */}
+      <div className="flex items-center gap-3 mb-12">
+        <div className="w-10 h-10 bg-gradient-to-br from-neon-blue to-neon-purple rounded-lg flex items-center justify-center">
+          <Shield className="w-6 h-6 text-white" />
         </div>
-        <button onClick={onClose} style={styles.closeBtn}>✕</button>
+        <div>
+          <div className="font-bold text-lg text-white">Nexus</div>
+          <div className="text-xs text-neon-blue">Guardian</div>
+        </div>
       </div>
 
-      {/* Stats row */}
-      <div style={styles.statsRow}>
-        {[
-          { label: "TXs", value: selectedNode.txCount.toLocaleString() },
-          { label: "Balance", value: `${selectedNode.balanceEth.toFixed(3)} ETH` },
-          { label: "Risk Score", value: (selectedNode.riskScore * 1000).toFixed(0) + "/1000" },
-        ].map(({ label, value }) => (
-          <div key={label} style={styles.statCard}>
-            <div style={styles.statValue}>{value}</div>
-            <div style={styles.statLabel}>{label}</div>
-          </div>
+      {/* Navigation */}
+      <nav className="space-y-2 flex-1">
+        {navItems.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => onPageChange(id as any)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+              currentPage === id
+                ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/50 shadow-glow-blue'
+                : 'text-cyber-400 hover:bg-cyber-800/50 hover:text-cyber-100'
+            }`}
+          >
+            <Icon className="w-5 h-5" />
+            <span className="font-medium">{label}</span>
+          </button>
         ))}
+      </nav>
+
+      {/* Stats */}
+      <div className="space-y-3 mb-6 pt-6 border-t border-cyber-700/50">
+        <div className="bg-cyber-800/50 rounded-lg p-3">
+          <div className="text-xs text-cyber-400 mb-1">Threats Detected</div>
+          <div className="text-2xl font-bold text-neon-green">847</div>
+        </div>
+        <div className="bg-cyber-800/50 rounded-lg p-3">
+          <div className="text-xs text-cyber-400 mb-1">Security Score</div>
+          <div className="text-2xl font-bold text-neon-blue">92%</div>
+        </div>
       </div>
 
-      {/* AI Forensic Analysis */}
-      <div style={styles.section}>
+      {/* Footer */}
+      <div className="space-y-2 border-t border-cyber-700/50 pt-6">
+        <button className="w-full flex items-center gap-3 px-4 py-2 text-cyber-400 hover:text-cyber-100 hover:bg-cyber-800/50 rounded-lg transition-colors">
+          <Zap className="w-4 h-4" />
+          <span className="text-sm">Settings</span>
+        </button>
+        <button className="w-full flex items-center gap-3 px-4 py-2 text-cyber-400 hover:text-cyber-100 hover:bg-cyber-800/50 rounded-lg transition-colors">
+          <LogOut className="w-4 h-4" />
+          <span className="text-sm">Disconnect</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
         <div style={styles.sectionHeader}>
           <span>🔍 FORENSIC INTELLIGENCE</span>
           <button onClick={fetchReport} disabled={loading} style={styles.analyzeBtn}>
@@ -181,7 +143,6 @@ export default function Sidebar({ selectedNode, onClose }: SidebarProps) {
   );
 }
 
-function riskToColor(score: number): string {
   if (score > 0.85) return "#FF3B3B";
   if (score > 0.65) return "#FF8C00";
   if (score > 0.40) return "#FFD700";
