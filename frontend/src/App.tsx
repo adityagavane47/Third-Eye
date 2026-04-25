@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
@@ -24,4 +25,13 @@ export default function App() {
       <RightPanel selectedThreat={selectedThreat} />
     </div>
   );
+=======
+import Dashboard from "./pages/Dashboard";
+
+export default function App() {
+  // Dev mode: render Dashboard directly — no Privy appId needed
+  // To enable Web3 auth, add VITE_PRIVY_APP_ID to your .env and
+  // wrap <Dashboard /> with <PrivyProvider> here.
+  return <Dashboard />;
+>>>>>>> 65e87a86fe53cf5d1271775aed34951c2454a04c
 }

@@ -4,7 +4,6 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
 import Galaxy3D, { type GalaxyNode, type GraphData } from "../components/Galaxy3D";
 import Sidebar from "../components/Sidebar";
 
@@ -13,8 +12,6 @@ const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const EMPTY_GRAPH: GraphData = { nodes: [], links: [] };
 
 export default function Dashboard() {
-  const { login, logout, authenticated, user } = usePrivy();
-
   const [graphData, setGraphData] = useState<GraphData>(EMPTY_GRAPH);
   const [selectedNode, setSelectedNode] = useState<GalaxyNode | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -29,12 +26,12 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Graph fetch failed");
       const data = await res.json();
       setGraphData(data);
-      // Alert mode if any flagged nodes exist
       setAlertMode(data.nodes?.some((n: GalaxyNode) => n.flagged) ?? false);
       setLastRefresh(new Date());
     } catch {
       // In dev, use mock data so UI is still renderable
       setGraphData(MOCK_GRAPH_DATA);
+      setAlertMode(MOCK_GRAPH_DATA.nodes.some((n) => n.flagged));
     } finally {
       setLoading(false);
     }
@@ -42,7 +39,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchGraph();
-    const interval = setInterval(fetchGraph, 30_000); // Poll every 30s
+    const interval = setInterval(fetchGraph, 30_000);
     return () => clearInterval(interval);
   }, [fetchGraph]);
 
@@ -87,20 +84,8 @@ export default function Dashboard() {
 
         <div style={styles.navActions}>
           <button onClick={fetchGraph} style={styles.refreshBtn}>⟳ Refresh</button>
-          {authenticated ? (
-            <div style={styles.userMenu}>
-              <span style={styles.userAddress}>
-                {user?.wallet?.address
-                  ? `${user.wallet.address.slice(0, 6)}…${user.wallet.address.slice(-4)}`
-                  : user?.email?.address ?? "Connected"}
-              </span>
-              <button onClick={logout} style={styles.logoutBtn}>Disconnect</button>
-            </div>
-          ) : (
-            <button onClick={login} style={styles.connectBtn}>
-              Connect Wallet
-            </button>
-          )}
+          {/* Connect Wallet button — wire up Privy here once VITE_PRIVY_APP_ID is set */}
+          <button style={styles.connectBtn}>Connect Wallet</button>
         </div>
       </nav>
 
@@ -132,10 +117,8 @@ export default function Dashboard() {
       {/* CSS Animations */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #000; overflow: hidden; }
-
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
@@ -221,25 +204,6 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "7px 16px",
     fontSize: 12,
     fontWeight: 700,
-  },
-  userMenu: { display: "flex", alignItems: "center", gap: 8 },
-  userAddress: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: 12,
-    color: "#94A3B8",
-    background: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 6,
-    padding: "4px 10px",
-  },
-  logoutBtn: {
-    background: "transparent",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 6,
-    color: "#64748B",
-    cursor: "pointer",
-    padding: "4px 10px",
-    fontSize: 11,
   },
   content: { flex: 1, display: "flex", overflow: "hidden" },
   loadingScreen: {
