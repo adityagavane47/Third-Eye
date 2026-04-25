@@ -1,75 +1,164 @@
-import { Shield, Activity, TrendingUp, LogOut, Zap } from 'lucide-react';
+/**
+ * frontend/src/components/Sidebar.tsx — Forensic Intelligence Panel
+ * Role: UI/Viz Designer (Member 4)
+ *
+ * Displays wallet risk details and triggers the Gemini AI forensic report
+ * when a node is selected in the Galaxy3D visualization.
+ * Also exposes the Guardian Shield button for on-chain blacklisting.
+ */
 
-interface SidebarProps {
-  currentPage: 'dashboard' | 'monitor' | 'insights';
-  onPageChange: (page: 'dashboard' | 'monitor' | 'insights') => void;
+import React, { useCallback, useState } from "react";
+import type { GalaxyNode } from "./Galaxy3D";
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+// ── Risk color mapping ─────────────────────────────────────────
+const RISK_COLORS: Record<string, string> = {
+  CRITICAL: "#FF3B3B",
+  HIGH:     "#FF8C00",
+  MEDIUM:   "#FFD700",
+  LOW:      "#4ADE80",
+};
+
+function scoreToColor(score: number): string {
+  if (score > 0.85) return "#FF3B3B";
+  if (score > 0.65) return "#FF8C00";
+  if (score > 0.40) return "#FFD700";
+  return "#4ADE80";
 }
 
-export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Shield },
-    { id: 'monitor', label: 'Monitor', icon: Activity },
-    { id: 'insights', label: 'Insights', icon: TrendingUp },
-  ];
+// ── Forensic Report Types ──────────────────────────────────────
+interface ForensicReport {
+  wallet_address: string;
+  risk_level: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+  risk_score: number;
+  executive_summary: string;
+  threat_narrative: string;
+  recommended_actions: string[];
+  exploit_categories: string[];
+}
+
+// ── Props ──────────────────────────────────────────────────────
+interface SidebarProps {
+  selectedNode: GalaxyNode | null;
+  onClose: () => void;
+}
+
+// ── Component ──────────────────────────────────────────────────
+export default function Sidebar({ selectedNode, onClose }: SidebarProps) {
+  const [report, setReport] = useState<ForensicReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
+  const [txHash, setTxHash] = useState<string | null>(null);
+
+  const fetchReport = useCallback(async () => {
+    if (!selectedNode) return;
+    setLoading(true);
+    setError(null);
+    setReport(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/forensic/report/${selectedNode.address}`);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const data = await res.json();
+      setReport(data);
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to fetch forensic report");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedNode]);
+
+  const handleShield = useCallback(async () => {
+    if (!selectedNode) return;
+    setTxStatus("pending");
+    setTxHash(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/graph/flag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet_address: selectedNode.address,
+          risk_score: selectedNode.riskScore,
+        }),
+      });
+      if (!res.ok) throw new Error(`Shield failed: ${res.status}`);
+      const data = await res.json();
+      setTxHash(data?.tx_hash ?? null);
+      setTxStatus("success");
+    } catch (err: any) {
+      setTxStatus("error");
+    }
+  }, [selectedNode]);
+
+  if (!selectedNode) {
+    return (
+      <aside style={styles.sidebar}>
+        <div style={styles.emptyState}>
+          <div style={{ fontSize: 40 }}>🌌</div>
+          <p style={styles.emptyText}>
+            Click any node in the galaxy to begin forensic analysis.
+          </p>
+        </div>
+      </aside>
+    );
+  }
+
+  const riskColor = scoreToColor(selectedNode.riskScore);
 
   return (
-    <div className="w-64 bg-cyber-900 border-r border-cyber-700/50 flex flex-col p-6 shadow-lg">
-      {/* Logo */}
-      <div className="flex items-center gap-3 mb-12">
-        <div className="w-10 h-10 bg-gradient-to-br from-neon-blue to-neon-purple rounded-lg flex items-center justify-center">
-          <Shield className="w-6 h-6 text-white" />
-        </div>
+    <aside style={styles.sidebar}>
+      {/* Header */}
+      <div style={styles.header}>
         <div>
-          <div className="font-bold text-lg text-white">Nexus</div>
-          <div className="text-xs text-neon-blue">Guardian</div>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="space-y-2 flex-1">
-        {navItems.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => onPageChange(id as any)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-              currentPage === id
-                ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/50 shadow-glow-blue'
-                : 'text-cyber-400 hover:bg-cyber-800/50 hover:text-cyber-100'
-            }`}
+          <div
+            style={{
+              ...styles.riskBadge,
+              background: riskColor + "20",
+              color: riskColor,
+              border: `1px solid ${riskColor}60`,
+            }}
           >
-            <Icon className="w-5 h-5" />
-            <span className="font-medium">{label}</span>
-          </button>
-        ))}
-      </nav>
-
-      {/* Stats */}
-      <div className="space-y-3 mb-6 pt-6 border-t border-cyber-700/50">
-        <div className="bg-cyber-800/50 rounded-lg p-3">
-          <div className="text-xs text-cyber-400 mb-1">Threats Detected</div>
-          <div className="text-2xl font-bold text-neon-green">847</div>
+            {selectedNode.riskScore > 0.85
+              ? "⚠ CRITICAL"
+              : selectedNode.riskScore > 0.65
+              ? "⚠ HIGH"
+              : selectedNode.riskScore > 0.40
+              ? "● MEDIUM"
+              : "✓ LOW"}{" "}
+            RISK &nbsp;·&nbsp; {(selectedNode.riskScore * 100).toFixed(1)}%
+          </div>
+          <div style={styles.walletAddress}>
+            {selectedNode.address.slice(0, 10)}…{selectedNode.address.slice(-6)}
+          </div>
+          <div style={styles.labelBadge}>
+            {selectedNode.label.toUpperCase()} &nbsp;|&nbsp;{" "}
+            {selectedNode.flagged ? "🚩 FLAGGED" : "◎ ACTIVE"}
+          </div>
         </div>
-        <div className="bg-cyber-800/50 rounded-lg p-3">
-          <div className="text-xs text-cyber-400 mb-1">Security Score</div>
-          <div className="text-2xl font-bold text-neon-blue">92%</div>
+        <button onClick={onClose} style={styles.closeBtn}>✕</button>
+      </div>
+
+      {/* Stats Row */}
+      <div style={styles.statsRow}>
+        <div style={styles.statCard}>
+          <div style={styles.statValue}>{selectedNode.txCount.toLocaleString()}</div>
+          <div style={styles.statLabel}>TRANSACTIONS</div>
+        </div>
+        <div style={styles.statCard}>
+          <div style={styles.statValue}>{selectedNode.balanceEth.toFixed(3)}</div>
+          <div style={styles.statLabel}>BALANCE ETH</div>
+        </div>
+        <div style={styles.statCard}>
+          <div style={{ ...styles.statValue, color: riskColor }}>
+            {(selectedNode.riskScore * 100).toFixed(0)}%
+          </div>
+          <div style={styles.statLabel}>RISK SCORE</div>
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="space-y-2 border-t border-cyber-700/50 pt-6">
-        <button className="w-full flex items-center gap-3 px-4 py-2 text-cyber-400 hover:text-cyber-100 hover:bg-cyber-800/50 rounded-lg transition-colors">
-          <Zap className="w-4 h-4" />
-          <span className="text-sm">Settings</span>
-        </button>
-        <button className="w-full flex items-center gap-3 px-4 py-2 text-cyber-400 hover:text-cyber-100 hover:bg-cyber-800/50 rounded-lg transition-colors">
-          <LogOut className="w-4 h-4" />
-          <span className="text-sm">Disconnect</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
+      {/* Forensic Intelligence Section */}
+      <div style={styles.section}>
         <div style={styles.sectionHeader}>
           <span>🔍 FORENSIC INTELLIGENCE</span>
           <button onClick={fetchReport} disabled={loading} style={styles.analyzeBtn}>
@@ -81,12 +170,14 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
 
         {report ? (
           <div>
-            <div style={{
-              ...styles.riskLevelBanner,
-              background: (RISK_COLORS[report.risk_level] ?? "#94A3B8") + "18",
-              borderColor: RISK_COLORS[report.risk_level] ?? "#94A3B8",
-              color: RISK_COLORS[report.risk_level] ?? "#94A3B8",
-            }}>
+            <div
+              style={{
+                ...styles.riskLevelBanner,
+                background: (RISK_COLORS[report.risk_level] ?? "#94A3B8") + "18",
+                borderColor: RISK_COLORS[report.risk_level] ?? "#94A3B8",
+                color: RISK_COLORS[report.risk_level] ?? "#94A3B8",
+              }}
+            >
               ⚠ {report.risk_level} RISK
             </div>
             <p style={styles.summaryText}>{report.executive_summary}</p>
@@ -117,16 +208,16 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
       <div style={styles.shieldSection}>
         <button
           onClick={handleShield}
-          disabled={txStatus === "pending" || txStatus === "confirming"}
+          disabled={txStatus === "pending"}
           style={{
             ...styles.shieldBtn,
-            opacity: txStatus === "pending" || txStatus === "confirming" ? 0.6 : 1,
+            opacity: txStatus === "pending" ? 0.6 : 1,
           }}
         >
-          {txStatus === "pending" && "⏳ Sending…"}
-          {txStatus === "confirming" && "⛓ Confirming…"}
-          {txStatus === "success" && "✅ Shield Active"}
-          {(txStatus === "idle" || txStatus === "error") && "🛡 Activate Guardian Shield"}
+          {txStatus === "pending"   && "⏳ Sending…"}
+          {txStatus === "success"   && "✅ Shield Active"}
+          {txStatus === "error"     && "❌ Failed — Retry"}
+          {txStatus === "idle"      && "🛡 Activate Guardian Shield"}
         </button>
         {txHash && (
           <a
@@ -143,13 +234,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   );
 }
 
-  if (score > 0.85) return "#FF3B3B";
-  if (score > 0.65) return "#FF8C00";
-  if (score > 0.40) return "#FFD700";
-  return "#4ADE80";
-}
-
-// ── Inline styles (avoids Tailwind dependency, Member 4 owns CSS) ──
+// ── Inline Styles ──────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   sidebar: {
     width: 380,
@@ -196,11 +281,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#CBD5E1",
     margin: "4px 0",
   },
-  labelBadge: {
-    fontSize: 10,
-    color: "#64748B",
-    letterSpacing: "0.1em",
-  },
+  labelBadge: { fontSize: 10, color: "#64748B", letterSpacing: "0.1em" },
   closeBtn: {
     background: "transparent",
     border: "1px solid rgba(255,255,255,0.1)",
