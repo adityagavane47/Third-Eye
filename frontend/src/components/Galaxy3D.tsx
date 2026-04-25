@@ -99,25 +99,9 @@ export default function Galaxy3D({
     }
   }, [selectedNode]);
 
-  // Rotating camera animation (slow, cinematic)
-  useEffect(() => {
-    if (!graphRef.current) return;
-    let angle = 0;
-    const distance = 600;
-    const interval = setInterval(() => {
-      if (!selectedNode) {
-        angle += 0.002;
-        graphRef.current?.cameraPosition({
-          x: distance * Math.sin(angle),
-          z: distance * Math.cos(angle),
-          y: 80,
-        });
-      }
-    }, 30);
-    return () => clearInterval(interval);
-  }, [selectedNode]);
+  // Rotating camera animation removed — was causing 30fps re-renders constantly
+  // Users can orbit manually with mouse drag
 
-  // Custom 3D node renderer using Three.js spheres
   const nodeThreeObject = useCallback(
     (node: GalaxyNode) => {
       const color = riskToColor(node.riskScore, node.flagged);
@@ -252,16 +236,15 @@ export default function Galaxy3D({
         onNodeClick={(node: GalaxyNode) => onNodeSelect(node)}
         linkColor={linkColor}
         linkWidth={linkWidth}
-        linkOpacity={0.4}
-        linkDirectionalParticles={2}
-        linkDirectionalParticleWidth={(link: GalaxyLink) => (link.valueEth > 5 ? 2 : 0.5)}
-        linkDirectionalParticleSpeed={0.005}
-        linkDirectionalParticleColor={linkColor}
+        linkOpacity={0.3}
+        linkDirectionalParticles={0}
         enableNodeDrag={true}
         enableNavigationControls={true}
         showNavInfo={false}
-        d3AlphaDecay={0.01}
-        d3VelocityDecay={0.3}
+        d3AlphaDecay={0.04}
+        d3VelocityDecay={0.4}
+        warmupTicks={100}
+        cooldownTicks={200}
       />
     </div>
   );

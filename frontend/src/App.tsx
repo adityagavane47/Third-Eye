@@ -1,8 +1,71 @@
-import Dashboard from "./pages/Dashboard";
+/**
+ * frontend/src/App.tsx — Application Root
+ *
+ * Conditionally wraps the app with PrivyProvider when VITE_PRIVY_APP_ID
+ * is configured. Falls back to dev mode (no auth) otherwise.
+ *
+ * Chain: Base Sepolia (84532) is both the default and the only supported chain.
+ * Theme: Dark + Sentinel Galaxy accent (#00D4FF)
+ */
 
+import type { Chain } from "@privy-io/react-auth";
+import Dashboard from "./pages/Dashboard";
+import { PrivyAuthProvider } from "./context/AuthContext";
+
+// ── Base Sepolia chain definition ────────────────────────────
+export const BASE_SEPOLIA: Chain = {
+  id: 84532,
+  name: "Base Sepolia",
+  network: "base-sepolia",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: {
+    default: { http: [import.meta.env.VITE_BASE_SEPOLIA_RPC ?? "https://sepolia.base.org"] },
+    public:  { http: [import.meta.env.VITE_BASE_SEPOLIA_RPC ?? "https://sepolia.base.org"] },
+  },
+  blockExplorers: {
+    default: { name: "BaseScan", url: "https://sepolia.basescan.org" },
+  },
+  testnet: true,
+};
+
+const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string | undefined;
+const HAS_PRIVY = !!PRIVY_APP_ID && PRIVY_APP_ID !== "your_privy_app_id_here";
+
+// ── App ───────────────────────────────────────────────────────
 export default function App() {
-  // Dev mode: render Dashboard directly — no Privy appId needed
-  // To enable Web3 auth, add VITE_PRIVY_APP_ID to your .env and
-  // wrap <Dashboard /> with <PrivyProvider> here.
-  return <Dashboard />;
+  if (!HAS_PRIVY) {
+    // Dev mode: no Privy App ID configured — render dashboard directly.
+    // Auth buttons will show "Connect Wallet" with no-op handlers.
+    console.info("[Sentinel Galaxy] VITE_PRIVY_APP_ID not set — running in dev mode without auth.");
+    return <Dashboard />;
+  }
+
+  // Production / staging: dynamically import PrivyProvider only when needed
+  // so the bundle doesn't pay the Privy cost in dev mode.
+  const { PrivyProvider } = require("@privy-io/react-auth");
+
+  return (
+    <PrivyProvider
+      appId={PRIVY_APP_ID!}
+      config={{
+        loginMethods: ["email", "wallet"],
+        appearance: {
+          theme: "dark",
+          accentColor: "#00D4FF",
+          logo: "https://sentinel-galaxy.vercel.app/logo.svg",
+          showWalletLoginFirst: false,
+        },
+        defaultChain: BASE_SEPOLIA,
+        supportedChains: [BASE_SEPOLIA],
+        embeddedWallets: {
+          createOnLogin: "users-without-wallets",
+          noPromptOnSignature: false,
+        },
+      }}
+    >
+      <PrivyAuthProvider>
+        <Dashboard />
+      </PrivyAuthProvider>
+    </PrivyProvider>
+  );
 }

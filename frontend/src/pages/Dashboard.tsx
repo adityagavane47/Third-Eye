@@ -6,12 +6,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Galaxy3D, { type GalaxyNode, type GraphData } from "../components/Galaxy3D";
 import Sidebar from "../components/Sidebar";
+import { useAuth } from "../context/AuthContext";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 const EMPTY_GRAPH: GraphData = { nodes: [], links: [] };
 
 export default function Dashboard() {
+  const { authenticated, walletAddress, login, logout } = useAuth();
   const [graphData, setGraphData] = useState<GraphData>(EMPTY_GRAPH);
   const [selectedNode, setSelectedNode] = useState<GalaxyNode | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -22,7 +24,7 @@ export default function Dashboard() {
   // Fetch graph data from backend
   const fetchGraph = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/graph/nodes?limit=500`);
+      const res = await fetch(`${API_BASE}/api/graph/nodes?limit=200`);
       if (!res.ok) throw new Error("Graph fetch failed");
       const data = await res.json();
       setGraphData(data);
@@ -84,8 +86,17 @@ export default function Dashboard() {
 
         <div style={styles.navActions}>
           <button onClick={fetchGraph} style={styles.refreshBtn}>⟳ Refresh</button>
-          {/* Connect Wallet button — wire up Privy here once VITE_PRIVY_APP_ID is set */}
-          <button style={styles.connectBtn}>Connect Wallet</button>
+          {authenticated ? (
+            <div style={styles.walletGroup}>
+              <div style={styles.walletAddress}>
+                <span style={styles.walletDot} />
+                {walletAddress ?? "Connected"}
+              </div>
+              <button onClick={() => logout()} style={styles.logoutBtn}>Disconnect</button>
+            </div>
+          ) : (
+            <button onClick={() => login()} style={styles.connectBtn}>Connect Wallet</button>
+          )}
         </div>
       </nav>
 
@@ -204,6 +215,41 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "7px 16px",
     fontSize: 12,
     fontWeight: 700,
+  },
+  walletGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: "rgba(0,212,255,0.06)",
+    border: "1px solid rgba(0,212,255,0.25)",
+    borderRadius: 8,
+    padding: "4px 4px 4px 12px",
+  },
+  walletAddress: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 11,
+    fontFamily: "'JetBrains Mono', monospace",
+    color: "#00D4FF",
+    letterSpacing: "0.04em",
+  },
+  walletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: "#4ADE80",
+    boxShadow: "0 0 6px #4ADE80",
+    display: "inline-block" as const,
+  },
+  logoutBtn: {
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 6,
+    color: "#94A3B8",
+    cursor: "pointer",
+    padding: "4px 10px",
+    fontSize: 11,
   },
   content: { flex: 1, display: "flex", overflow: "hidden" },
   loadingScreen: {
