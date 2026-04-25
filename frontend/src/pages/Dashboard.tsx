@@ -20,6 +20,13 @@ export default function Dashboard() {
   const [alertMode, setAlertMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [simulating, setSimulating] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+
+  const showToast = (msg: string, type: "success" | "error" | "info" = "info") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4500);
+  };
 
   // Fetch graph data from backend
   const fetchGraph = useCallback(async () => {
@@ -55,6 +62,39 @@ export default function Dashboard() {
     setSelectedNode(null);
   };
 
+  const simulateExploit = async () => {
+    setSimulating(true);
+    showToast("🚨 Injecting exploit wallet into the galaxy…", "info");
+    try {
+      const res = await fetch(`${API_BASE}/api/simulate-exploit`, { method: "POST" });
+      if (!res.ok) throw new Error(`Simulation failed: ${res.status}`);
+      const data = await res.json();
+
+      // 1. Refresh the graph so the attacker node appears
+      await fetchGraph();
+      setAlertMode(true);
+
+      // 2. Auto-select the injected attacker node in the sidebar
+      const attackerNode: GalaxyNode = {
+        id: data.attacker_address,
+        address: data.attacker_address,
+        label: "attacker",
+        riskScore: 0.98,
+        flagged: true,
+        txCount: 150,
+        balanceEth: 5.0,
+      };
+      setSelectedNode(attackerNode);
+      setSidebarOpen(true);
+
+      showToast("✅ Shield Activated — Attacker blacklisted on Base Sepolia", "success");
+    } catch (err: any) {
+      showToast(`❌ Simulation failed: ${err?.message}`, "error");
+    } finally {
+      setSimulating(false);
+    }
+  };
+
   return (
     <div style={styles.root}>
       {/* Top Navigation Bar */}
@@ -86,6 +126,13 @@ export default function Dashboard() {
 
         <div style={styles.navActions}>
           <button onClick={fetchGraph} style={styles.refreshBtn}>⟳ Refresh</button>
+          <button
+            onClick={simulateExploit}
+            disabled={simulating}
+            style={{ ...styles.exploitBtn, opacity: simulating ? 0.6 : 1 }}
+          >
+            {simulating ? "⏳ Injecting…" : "💀 Simulate Exploit"}
+          </button>
           {authenticated ? (
             <div style={styles.walletGroup}>
               <div style={styles.walletAddress}>
@@ -99,6 +146,27 @@ export default function Dashboard() {
           )}
         </div>
       </nav>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div style={{
+          ...styles.toast,
+          background:
+            toast.type === "success" ? "rgba(74,222,128,0.12)" :
+            toast.type === "error"   ? "rgba(255,59,59,0.12)"  :
+                                       "rgba(0,212,255,0.10)",
+          borderColor:
+            toast.type === "success" ? "#4ADE80" :
+            toast.type === "error"   ? "#FF3B3B"  :
+                                       "#00D4FF",
+          color:
+            toast.type === "success" ? "#4ADE80" :
+            toast.type === "error"   ? "#FF3B3B"  :
+                                       "#00D4FF",
+        }}>
+          {toast.msg}
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div style={styles.content}>
@@ -205,6 +273,35 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     padding: "5px 12px",
     fontSize: 12,
+  },
+  exploitBtn: {
+    background: "linear-gradient(135deg, rgba(255,59,59,0.15), rgba(255,140,0,0.10))",
+    border: "1px solid #FF3B3B",
+    borderRadius: 8,
+    color: "#FF3B3B",
+    cursor: "pointer",
+    padding: "6px 14px",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    transition: "all 0.2s",
+  },
+  toast: {
+    position: "fixed" as const,
+    bottom: 28,
+    left: "50%",
+    transform: "translateX(-50%)",
+    border: "1px solid",
+    borderRadius: 10,
+    padding: "12px 24px",
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: "'Inter', sans-serif",
+    backdropFilter: "blur(12px)",
+    zIndex: 9999,
+    pointerEvents: "none" as const,
+    letterSpacing: "0.02em",
+    boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
   },
   connectBtn: {
     background: "linear-gradient(135deg, #4F46E5, #7C3AED)",

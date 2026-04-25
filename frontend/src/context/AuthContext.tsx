@@ -9,6 +9,7 @@
  */
 
 import React, { createContext, useContext } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 
 // ── Auth State Contract ───────────────────────────────────────
 export interface AuthState {
@@ -40,9 +41,6 @@ export const useAuth = () => useContext(AuthContext);
 // This component MUST be rendered inside <PrivyProvider>.
 // It reads from Privy and injects values into AuthContext.
 export function PrivyAuthProvider({ children }: { children: React.ReactNode }) {
-  // Dynamic import — only called when PrivyProvider is in the tree
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { usePrivy } = require("@privy-io/react-auth");
   const { authenticated, login, logout, user } = usePrivy();
 
   const fullAddress = user?.wallet?.address ?? null;

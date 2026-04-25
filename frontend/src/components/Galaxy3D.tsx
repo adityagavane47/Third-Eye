@@ -11,6 +11,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";
 
+// Global pulse timer — drives sin() animation for attacker nodes
+let _pulseT = 0;
+setInterval(() => { _pulseT += 0.08; }, 50); // 20fps is plenty
+
+
 // ── Types ──────────────────────────────────────────────────────
 export interface GalaxyNode {
   id: string;             // wallet address (0x...)
@@ -104,36 +109,38 @@ export default function Galaxy3D({
 
   const nodeThreeObject = useCallback(
     (node: GalaxyNode) => {
-      const color = riskToColor(node.riskScore, node.flagged);
-      const size = labelToSize(node.label, node.riskScore);
+      const isAttacker = node.label === "attacker";
       const isSelected = selectedNode?.id === node.id;
+      const color = isAttacker ? "#FF1111" : riskToColor(node.riskScore, node.flagged);
+      const baseSize = labelToSize(node.label, node.riskScore);
 
-      const group = new THREE.Group();
+      // Pulsing size for attacker nodes: oscillates between 0.7x and 1.5x
+      const pulse = isAttacker ? 0.7 + 0.8 * Math.abs(Math.sin(_pulseT)) : 1;
+      const size = (isSelected ? baseSize * 1.5 : baseSize) * pulse;
 
-      // Core sphere
-      const geometry = new THREE.SphereGeometry(isSelected ? size * 1.5 : size, 16, 16);
-      const material = new THREE.MeshStandardMaterial({
+      const geometry = new THREE.SphereGeometry(size, isAttacker ? 12 : 8, isAttacker ? 12 : 8);
+      const material = new THREE.MeshBasicMaterial({
         color: new THREE.Color(color),
-        emissive: new THREE.Color(color),
-        emissiveIntensity: isSelected ? 1.5 : node.flagged ? 0.8 : 0.3,
-        roughness: 0.2,
-        metalness: 0.6,
       });
-      group.add(new THREE.Mesh(geometry, material));
+      const mesh = new THREE.Mesh(geometry, material);
 
-      // Glow halo for flagged nodes
-      if (node.flagged || isSelected) {
-        const haloGeo = new THREE.SphereGeometry(size * 2.5, 16, 16);
+      // Glow halo — large red corona for attackers
+      if (isAttacker || isSelected || node.flagged) {
+        const haloSize = isAttacker ? size * 3.5 : size * 2.5;
+        const haloGeo = new THREE.SphereGeometry(haloSize, 8, 8);
         const haloMat = new THREE.MeshBasicMaterial({
           color: new THREE.Color(color),
           transparent: true,
-          opacity: 0.12,
+          opacity: isAttacker ? 0.25 + 0.15 * Math.abs(Math.sin(_pulseT)) : 0.12,
           side: THREE.BackSide,
         });
+        const group = new THREE.Group();
+        group.add(mesh);
         group.add(new THREE.Mesh(haloGeo, haloMat));
+        return group;
       }
 
-      return group;
+      return mesh;
     },
     [selectedNode]
   );

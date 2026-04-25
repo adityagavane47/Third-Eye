@@ -9,8 +9,10 @@
  */
 
 import type { Chain } from "@privy-io/react-auth";
+import { PrivyProvider } from "@privy-io/react-auth";
 import Dashboard from "./pages/Dashboard";
 import { PrivyAuthProvider } from "./context/AuthContext";
+
 
 // ── Base Sepolia chain definition ────────────────────────────
 export const BASE_SEPOLIA: Chain = {
@@ -40,9 +42,8 @@ export default function App() {
     return <Dashboard />;
   }
 
-  // Production / staging: dynamically import PrivyProvider only when needed
-  // so the bundle doesn't pay the Privy cost in dev mode.
-  const { PrivyProvider } = require("@privy-io/react-auth");
+  // Production / staging: PrivyProvider is imported at top level
+
 
   return (
     <PrivyProvider

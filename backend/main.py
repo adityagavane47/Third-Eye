@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import logging
 import os
+import random
 import time
 from contextlib import asynccontextmanager
 
@@ -41,7 +42,7 @@ async def lifespan(app: FastAPI):
     app.state.neo4j = get_driver()
     yield
     logger.info("🔴  Sentinel Galaxy API shutting down…")
-    app.state.neo4j.close()
+    await app.state.neo4j.close()
 
 
 app = FastAPI(
@@ -187,16 +188,117 @@ async def flag_wallet(wallet_address: str, risk_score: float, request: Request =
 
 
 @app.get("/api/forensic/report/{wallet_address}", tags=["AI Forensics"])
-async def get_forensic_report(wallet_address: str):
+async def get_forensic_report(wallet_address: str, request: Request = None):
     """
     Trigger AI forensic analysis for a wallet.
-    Calls the Gemini-powered ForensicAgent.
-    TODO (Member 1): Wire up ForensicAgent.analyze().
+    Calls the Groq-powered llm_engine for a sub-500ms structured report.
     """
-    # from agent.forensic_agent import ForensicAgent
-    # agent = ForensicAgent()
-    # report = await agent.analyze(wallet_address)
-    return {"address": wallet_address, "report": "TODO: AI analysis pending"}
+    from agent.llm_engine import generate_forensic_report
+
+    # Pull live risk data from Neo4j if available
+    risk_score = 0.75
+    label = "unknown"
+    try:
+        driver = request.app.state.neo4j
+        async with driver.session() as session:
+            result = await session.run(
+                "MATCH (w:Wallet {address: $addr}) "
+                "RETURN w.risk_score AS rs, w.label AS lbl LIMIT 1",
+                addr=wallet_address,
+            )
+            row = await result.single()
+            if row:
+                risk_score = row["rs"] or 0.75
+                label = row["lbl"] or "unknown"
+    except Exception:
+        pass
+
+    report = await generate_forensic_report(
+        wallet_address=wallet_address,
+        risk_score=risk_score,
+        label=label,
+    )
+    return report
+
+
+@app.post("/api/simulate-exploit", tags=["Simulation"])
+async def simulate_exploit(request: Request = None):
+    """
+    Inject a synthetic attacker wallet into Neo4j to demonstrate
+    the live detection and auto-shield response.
+    """
+    import secrets
+    from agent.llm_engine import generate_forensic_report
+
+    # Generate a realistic-looking attacker address
+    attacker_address = "0x" + secrets.token_hex(20)
+
+    # Risk signals that triggered detection
+    risk_hints = [
+        "High-velocity fund dispersion (>50 TXs in 24h)",
+        "Circular transaction cycle detected (A→B→C→A pattern)",
+        "Flash-loan footprint — zero-block borrow/repay detected",
+        "Funds routed through tornado-cash-style mixer hops",
+    ]
+
+    # Inject into Neo4j
+    driver = request.app.state.neo4j
+    async with driver.session() as session:
+        await session.run(
+            """
+            MERGE (w:Wallet {address: $address})
+            SET w.label      = 'attacker',
+                w.risk_score  = 0.98,
+                w.flagged     = true,
+                w.tx_count    = $tx_count,
+                w.balance_eth = $balance,
+                w.injected    = true,
+                w.last_seen   = datetime()
+            """,
+            address=attacker_address,
+            tx_count=random.randint(80, 200),
+            balance=round(random.uniform(0.5, 15.0), 4),
+        )
+
+        # Connect it to 3 existing random wallets for visual drama
+        victims_result = await session.run(
+            "MATCH (w:Wallet) WHERE w.address <> $addr "
+            "RETURN w.address AS addr ORDER BY rand() LIMIT 3",
+            addr=attacker_address,
+        )
+        victims = [r["addr"] async for r in victims_result]
+
+        for victim in victims:
+            tx_hash = "0x" + secrets.token_hex(32)
+            await session.run(
+                """
+                MATCH (a:Wallet {address: $attacker})
+                MATCH (v:Wallet {address: $victim})
+                MERGE (a)-[r:SENT_TO {tx_hash: $tx_hash}]->(v)
+                SET r.value_eth = $value, r.gas_used = $gas
+                """,
+                attacker=attacker_address,
+                victim=victim,
+                tx_hash=tx_hash,
+                value=round(random.uniform(10, 100), 4),
+                gas=random.randint(150_000, 500_000),
+            )
+
+    logger.warning("🚨 Exploit simulated — attacker wallet injected: %s", attacker_address)
+
+    # Generate instant forensic report
+    report = await generate_forensic_report(
+        wallet_address=attacker_address,
+        risk_score=0.98,
+        label="attacker",
+        risk_hints=risk_hints,
+    )
+
+    return {
+        "attacker_address": attacker_address,
+        "victims": victims,
+        "report": report,
+    }
 
 
 @app.get("/api/anomalies", tags=["Detection"])
