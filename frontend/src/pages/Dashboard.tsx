@@ -8,7 +8,10 @@ import Galaxy3D, { type GalaxyNode, type GraphData } from "../components/Galaxy3
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+// Use relative paths so Vite's proxy (/api → localhost:8000) handles routing.
+// This eliminates CORS errors entirely in development.
+const API_BASE = "";
+
 
 const EMPTY_GRAPH: GraphData = { nodes: [], links: [] };
 
@@ -57,6 +60,18 @@ export default function Dashboard() {
     setSidebarOpen(true);
   };
 
+  // Also open sidebar via a standalone button (fallback for when node click is hard to hit)
+  const handleOpenPanel = () => {
+    if (selectedNode) {
+      setSidebarOpen(true);
+    } else if (graphData.nodes.length > 0) {
+      // Auto-select the highest-risk node
+      const riskiest = [...graphData.nodes].sort((a, b) => b.riskScore - a.riskScore)[0];
+      setSelectedNode(riskiest);
+      setSidebarOpen(true);
+    }
+  };
+
   const handleSidebarClose = () => {
     setSidebarOpen(false);
     setSelectedNode(null);
@@ -64,17 +79,28 @@ export default function Dashboard() {
 
   const simulateExploit = async () => {
     setSimulating(true);
-    showToast("🚨 Injecting exploit wallet into the galaxy…", "info");
+    showToast("\ud83d\udea8 Injecting exploit wallet into the galaxy\u2026", "info");
+
+    // Open the sidebar immediately with a placeholder so something shows right away
+    const placeholderNode: GalaxyNode = {
+      id: "simulating",
+      address: "0xDetecting\u2026",
+      label: "attacker",
+      riskScore: 0.98,
+      flagged: true,
+      txCount: 0,
+      balanceEth: 0,
+    };
+    setSelectedNode(placeholderNode);
+    setSidebarOpen(true);
+    setAlertMode(true);
+
     try {
-      const res = await fetch(`${API_BASE}/api/simulate-exploit`, { method: "POST" });
-      if (!res.ok) throw new Error(`Simulation failed: ${res.status}`);
+      const res = await fetch("/api/simulate-exploit", { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      // 1. Refresh the graph so the attacker node appears
-      await fetchGraph();
-      setAlertMode(true);
-
-      // 2. Auto-select the injected attacker node in the sidebar
+      // Update sidebar with real attacker node
       const attackerNode: GalaxyNode = {
         id: data.attacker_address,
         address: data.attacker_address,
@@ -85,15 +111,18 @@ export default function Dashboard() {
         balanceEth: 5.0,
       };
       setSelectedNode(attackerNode);
-      setSidebarOpen(true);
 
-      showToast("✅ Shield Activated — Attacker blacklisted on Base Sepolia", "success");
+      // Refresh graph in background
+      fetchGraph();
+      showToast("\u2705 Shield Activated \u2014 Attacker blacklisted on Base Sepolia", "success");
     } catch (err: any) {
-      showToast(`❌ Simulation failed: ${err?.message}`, "error");
+      showToast(`Backend: ${err?.message ?? "fetch failed"} \u2014 demo mode`, "error");
+      // Sidebar stays open even on failure for demo purposes
     } finally {
       setSimulating(false);
     }
   };
+
 
   return (
     <div style={styles.root}>
@@ -126,6 +155,7 @@ export default function Dashboard() {
 
         <div style={styles.navActions}>
           <button onClick={fetchGraph} style={styles.refreshBtn}>⟳ Refresh</button>
+          <button onClick={handleOpenPanel} style={styles.refreshBtn}>🔍 Inspect Node</button>
           <button
             onClick={simulateExploit}
             disabled={simulating}
@@ -170,8 +200,8 @@ export default function Dashboard() {
 
       {/* Main Content Area */}
       <div style={styles.content}>
-        {/* 3D Galaxy */}
-        <div style={{ flex: 1, position: "relative" }}>
+        {/* 3D Galaxy — always fills the full area */}
+        <div style={{ width: "100%", height: "100%", position: "relative" }}>
           {loading ? (
             <div style={styles.loadingScreen}>
               <div style={styles.loadingSpinner} />
@@ -187,9 +217,20 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Sidebar — Forensic Intelligence Panel */}
+        {/* Sidebar — absolute overlay on the right so it never fights the canvas width */}
         {sidebarOpen && (
-          <Sidebar selectedNode={selectedNode} onClose={handleSidebarClose} />
+          <div style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            height: "100%",
+            width: 390,
+            zIndex: 50,
+            boxShadow: "-8px 0 32px rgba(0,0,0,0.6)",
+            animation: "slideIn 0.2s ease",
+          }}>
+            <Sidebar selectedNode={selectedNode} onClose={handleSidebarClose} />
+          </div>
         )}
       </div>
 
@@ -205,6 +246,10 @@ export default function Dashboard() {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to   { transform: translateX(0);    opacity: 1; }
         }
       `}</style>
     </div>
@@ -348,7 +393,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "4px 10px",
     fontSize: 11,
   },
-  content: { flex: 1, display: "flex", overflow: "hidden" },
+  content: {
+    flex: 1,
+    display: "flex",
+    overflow: "hidden",
+    position: "relative",  // needed for absolute sidebar overlay
+  },
   loadingScreen: {
     position: "absolute",
     inset: 0,

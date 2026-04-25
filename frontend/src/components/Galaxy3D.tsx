@@ -11,9 +11,30 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";
 
-// Global pulse timer — drives sin() animation for attacker nodes
-let _pulseT = 0;
-setInterval(() => { _pulseT += 0.08; }, 50); // 20fps is plenty
+// We will store references to attacker nodes here to animate them directly
+// outside of the React render cycle for smooth 60fps pulsing.
+const _attackerMeshes = new Set<{ core: THREE.Mesh; halo: THREE.Mesh }>();
+
+let animationFrameId: number;
+const startPulsing = () => {
+  let t = 0;
+  const animate = () => {
+    t += 0.05;
+    const scale = 0.8 + 0.5 * Math.abs(Math.sin(t));
+    const haloOpacity = 0.15 + 0.2 * Math.abs(Math.sin(t));
+
+    _attackerMeshes.forEach(({ core, halo }) => {
+      core.scale.set(scale, scale, scale);
+      halo.scale.set(scale, scale, scale);
+      if (halo.material instanceof THREE.MeshBasicMaterial) {
+        halo.material.opacity = haloOpacity;
+      }
+    });
+    animationFrameId = requestAnimationFrame(animate);
+  };
+  animate();
+};
+
 
 
 // ── Types ──────────────────────────────────────────────────────
@@ -93,6 +114,12 @@ export default function Galaxy3D({
     return () => observer.disconnect();
   }, []);
 
+  // Start/stop the animation loop when the component mounts/unmounts
+  useEffect(() => {
+    startPulsing();
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
+
   // Auto-zoom to selected node
   useEffect(() => {
     if (selectedNode && graphRef.current) {
@@ -104,6 +131,7 @@ export default function Galaxy3D({
     }
   }, [selectedNode]);
 
+
   // Rotating camera animation removed — was causing 30fps re-renders constantly
   // Users can orbit manually with mouse drag
 
@@ -113,30 +141,33 @@ export default function Galaxy3D({
       const isSelected = selectedNode?.id === node.id;
       const color = isAttacker ? "#FF1111" : riskToColor(node.riskScore, node.flagged);
       const baseSize = labelToSize(node.label, node.riskScore);
+      const size = isSelected ? baseSize * 1.5 : baseSize;
 
-      // Pulsing size for attacker nodes: oscillates between 0.7x and 1.5x
-      const pulse = isAttacker ? 0.7 + 0.8 * Math.abs(Math.sin(_pulseT)) : 1;
-      const size = (isSelected ? baseSize * 1.5 : baseSize) * pulse;
-
-      const geometry = new THREE.SphereGeometry(size, isAttacker ? 12 : 8, isAttacker ? 12 : 8);
-      const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(color),
-      });
+      const geometry = new THREE.SphereGeometry(size, isAttacker ? 16 : 8, isAttacker ? 16 : 8);
+      const material = new THREE.MeshBasicMaterial({ color: new THREE.Color(color) });
       const mesh = new THREE.Mesh(geometry, material);
 
-      // Glow halo — large red corona for attackers
+      // Glow halo
       if (isAttacker || isSelected || node.flagged) {
         const haloSize = isAttacker ? size * 3.5 : size * 2.5;
-        const haloGeo = new THREE.SphereGeometry(haloSize, 8, 8);
+        const haloGeo = new THREE.SphereGeometry(haloSize, 16, 16);
         const haloMat = new THREE.MeshBasicMaterial({
           color: new THREE.Color(color),
           transparent: true,
-          opacity: isAttacker ? 0.25 + 0.15 * Math.abs(Math.sin(_pulseT)) : 0.12,
+          opacity: 0.12,
           side: THREE.BackSide,
         });
+        const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+        
         const group = new THREE.Group();
         group.add(mesh);
-        group.add(new THREE.Mesh(haloGeo, haloMat));
+        group.add(haloMesh);
+
+        if (isAttacker) {
+          // Register for animation loop
+          _attackerMeshes.add({ core: mesh, halo: haloMesh });
+        }
+
         return group;
       }
 
@@ -144,6 +175,7 @@ export default function Galaxy3D({
     },
     [selectedNode]
   );
+
 
   // Link color based on transaction value
   const linkColor = useCallback((link: GalaxyLink) => {

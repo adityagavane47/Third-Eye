@@ -10,7 +10,8 @@
 import React, { useCallback, useState } from "react";
 import type { GalaxyNode } from "./Galaxy3D";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const API_BASE = "";
+
 
 // ── Risk color mapping ─────────────────────────────────────────
 const RISK_COLORS: Record<string, string> = {
