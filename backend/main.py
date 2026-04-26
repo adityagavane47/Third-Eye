@@ -1,5 +1,5 @@
 """
-backend/main.py — Sentinel Galaxy FastAPI Entry Point
+backend/main.py — Third Eye FastAPI Entry Point
 Role: Backend Architect (Member 3)
 
 Responsibilities:
@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 load_dotenv()
 
@@ -28,7 +29,7 @@ logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
-logger = logging.getLogger("sentinel.main")
+logger = logging.getLogger("Third Eye.main")
 
 HMAC_SECRET = os.getenv("HMAC_SECRET_KEY", "").encode()
 CORS_ORIGINS = os.getenv("API_CORS_ORIGINS", "http://localhost:5173").split(",")
@@ -38,15 +39,15 @@ CORS_ORIGINS = os.getenv("API_CORS_ORIGINS", "http://localhost:5173").split(",")
 async def lifespan(app: FastAPI):
     """Initialize connections on startup; clean up on shutdown."""
     from database import get_driver
-    logger.info("🛡️  Sentinel Galaxy API starting up…")
+    logger.info("🛡️  Third Eye API starting up…")
     app.state.neo4j = get_driver()
     yield
-    logger.info("🔴  Sentinel Galaxy API shutting down…")
+    logger.info("🔴  Third Eye API shutting down…")
     await app.state.neo4j.close()
 
 
 app = FastAPI(
-    title="Sentinel Galaxy API",
+    title="Third Eye API",
     description="On-Chain Immunity System — Backend Data & AI Layer",
     version="1.0.0",
     docs_url="/api/docs",
@@ -66,7 +67,7 @@ app.add_middleware(
 
 class HMACValidationMiddleware:
     """
-    Validates X-Sentinel-Signature header on internal service routes (/internal/*).
+    Validates X-Third Eye-Signature header on internal service routes (/internal/*).
     Signature format: HMAC-SHA256(secret, f"{method}:{path}:{timestamp}:{body_hex}")
     Header format:    "t=<unix_ts>,v1=<hex_signature>"
     Replay window:    300 seconds
@@ -99,16 +100,16 @@ class HMACValidationMiddleware:
         await self.app(scope, receive, send)
 
     async def _validate(self, request: Request) -> str | None:
-        header = request.headers.get("X-Sentinel-Signature", "")
+        header = request.headers.get("X-Third Eye-Signature", "")
         if not header:
-            return "Missing X-Sentinel-Signature header"
+            return "Missing X-Third Eye-Signature header"
 
         try:
             parts = dict(p.split("=", 1) for p in header.split(","))
             timestamp = int(parts["t"])
             provided_sig = parts["v1"]
         except (KeyError, ValueError):
-            return "Malformed X-Sentinel-Signature header"
+            return "Malformed X-Third Eye-Signature header"
 
         # Replay attack prevention
         if abs(time.time() - timestamp) > self.REPLAY_WINDOW_S:
@@ -127,83 +128,121 @@ class HMACValidationMiddleware:
 app.add_middleware(HMACValidationMiddleware)
 
 
-
 @app.get("/api/health", tags=["System"])
 async def health_check():
     """Liveness probe for load balancers and CI pipelines."""
-    return {"status": "ok", "service": "sentinel-galaxy-api", "version": "1.0.0"}
+    return {"status": "ok", "service": "Third Eye-galaxy-api", "version": "1.0.0"}
 
 
 @app.get("/api/graph/nodes", tags=["Graph"])
-async def get_graph_nodes(limit: int = 500, request: Request = None):
+async def get_graph_nodes(limit: int = 200, request: Request = None):
     """
-    Fetch wallet nodes and their relationships from Neo4j.
+    Fetch wallet nodes and their SENT_TO relationships from Neo4j.
     Returns data formatted for react-force-graph-3d.
     """
     driver = request.app.state.neo4j
     async with driver.session() as session:
-        # 1. Fetch nodes up to the limit
         nodes_result = await session.run(
-            "MATCH (w:Wallet) RETURN w LIMIT $limit", limit=limit
+            """
+            MATCH (w:Wallet)
+            RETURN
+                w.address    AS address,
+                w.label      AS label,
+                w.risk_score AS riskScore,
+                w.flagged    AS flagged,
+                w.tx_count   AS txCount,
+                w.balance_eth AS balanceEth
+            LIMIT $limit
+            """,
+            limit=limit,
         )
         nodes_data = await nodes_result.data()
-        
-        # Format nodes for the frontend
+
         nodes = []
         addresses = []
-        for record in nodes_data:
-            w = record["w"]
-            address = w.get("address")
-            addresses.append(address)
+        for row in nodes_data:
+            addr = row["address"]
+            if not addr:
+                continue
+            addresses.append(addr)
             nodes.append({
-                "id": address,
-                "address": address,
-                "label": w.get("label", "unknown"),
-                "riskScore": w.get("risk_score", 0.0),
-                "flagged": w.get("flagged", False),
-                "txCount": w.get("tx_count", 0),
-                "balanceEth": w.get("balance_eth", 0.0)
+                "id":         addr,
+                "address":    addr,
+                "label":      row["label"]     or "unknown",
+                "riskScore":  float(row["riskScore"] or 0.0),
+                "flagged":    bool(row["flagged"]   or False),
+                "txCount":    int(row["txCount"]    or 0),
+                "balanceEth": float(row["balanceEth"] or 0.0),
             })
 
-        # 2. Fetch edges (links) only between the nodes we just loaded
-        links_result = await session.run(
-            "MATCH (s:Wallet)-[r:SENT_TO]->(t:Wallet) "
-            "WHERE s.address IN $addresses AND t.address IN $addresses "
-            "RETURN s.address AS source, t.address AS target, "
-            "r.tx_hash AS txHash, r.value_eth AS valueEth",
-            addresses=addresses
-        )
-        links_data = await links_result.data()
+        if addresses:
+            links_result = await session.run(
+                """
+                UNWIND $addresses AS addr
+                MATCH (s:Wallet {address: addr})-[r:SENT_TO]->(t:Wallet)
+                WHERE t.address IN $addresses
+                RETURN
+                    s.address  AS source,
+                    t.address  AS target,
+                    r.tx_hash  AS txHash,
+                    r.value_eth AS valueEth
+                """,
+                addresses=addresses,
+            )
+            links_data = await links_result.data()
+        else:
+            links_data = []
 
     return {"nodes": nodes, "links": links_data}
 
 
+class FlagWalletRequest(BaseModel):
+    wallet_address: str
+    risk_score: float
+
+
 @app.post("/api/graph/flag", tags=["Graph"])
-async def flag_wallet(wallet_address: str, risk_score: float, request: Request = None):
-    """
-    Mark a wallet node as malicious in Neo4j.
-    TODO (Member 3): Write risk_score property and FLAGGED relationship.
-    """
-    return {"flagged": wallet_address, "risk_score": risk_score, "status": "TODO"}
+async def flag_wallet(body: FlagWalletRequest, request: Request = None):
+    driver = request.app.state.neo4j
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (w:Wallet {address: $address})
+            SET
+                w.flagged       = true,
+                w.risk_score    = $risk_score,
+                w.last_analyzed = datetime()
+            RETURN w.address AS address, w.risk_score AS risk_score, w.flagged AS flagged
+            """,
+            address=body.wallet_address,
+            risk_score=body.risk_score,
+        )
+        row = await result.single()
+
+    if not row:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": f"Wallet {body.wallet_address} not found in graph."},
+        )
+
+    return {
+        "flagged":     row["flagged"],
+        "address":     row["address"],
+        "risk_score":  row["risk_score"],
+        "status":      "updated",
+    }
 
 
 @app.get("/api/forensic/report/{wallet_address}", tags=["AI Forensics"])
 async def get_forensic_report(wallet_address: str, request: Request = None):
-    """
-    Trigger AI forensic analysis for a wallet.
-    Calls the Groq-powered llm_engine for a sub-500ms structured report.
-    """
     from agent.llm_engine import generate_forensic_report
-
-    # Pull live risk data from Neo4j if available
     risk_score = 0.75
     label = "unknown"
     try:
         driver = request.app.state.neo4j
         async with driver.session() as session:
             result = await session.run(
-                "MATCH (w:Wallet {address: $addr}) "
-                "RETURN w.risk_score AS rs, w.label AS lbl LIMIT 1",
+                "MATCH (w:Wallet {address: $addr}) RETURN w.risk_score AS rs, w.label AS lbl LIMIT 1",
                 addr=wallet_address,
             )
             row = await result.single()
@@ -223,46 +262,29 @@ async def get_forensic_report(wallet_address: str, request: Request = None):
 
 @app.post("/api/simulate-exploit", tags=["Simulation"])
 async def simulate_exploit(request: Request = None):
-    """
-    Inject a synthetic attacker wallet into Neo4j to demonstrate
-    the live detection and auto-shield response.
-    """
     import secrets
     import random
     from agent.llm_engine import generate_forensic_report
     from core.ml_engine import MLEngine
 
-    # Generate a realistic-looking attacker address
     attacker_address = "0x" + secrets.token_hex(20)
-
-    # 1. Simulate a malicious transaction history (used by ML Engine)
-    # We generate ~150 transactions. Some have massive gas to trigger flash loan heuristics
     tx_count = random.randint(120, 200)
     tx_history = []
     for i in range(tx_count):
         tx_history.append({
-            "to": "0x" + secrets.token_hex(20)[:10] + "...", # Some unique, some repeated
+            "to": "0x" + secrets.token_hex(20)[:10] + "...",
             "value_eth": random.uniform(0.1, 50.0),
-            "gas_used": 500_000 if i % 10 == 0 else 21_000, # Spike gas to trigger ML heuristics
+            "gas_used": 500_000 if i % 10 == 0 else 21_000,
         })
 
-    # 2. Run the transaction history through the Isolation Forest / ML Engine
     ml = MLEngine()
-    
-    # Quick dummy training so Isolation Forest is mathematically "trained" and can detect outliers
-    # We feed it 10 "normal" low-volume feature vectors
     normal_features = [[5.0, 1.0, 2.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1] for _ in range(10)]
     ml._model.train(normal_features)
+    ml_result = await ml.score(attacker_address, tx_history)
     
-    # Now score our simulated attacker!
-    # Because we added 500k gas and high tx volume, the ML engine will flag it heavily.
-    ml_result = ml.score(attacker_address, tx_history)
-    
-    # We boost the dynamic ML score slightly to ensure it crosses the "Critical" UI threshold
     dynamic_risk_score = min(0.99, ml_result.score + 0.40) 
     dynamic_risk_hints = ml_result.risk_hints
 
-    # 3. Inject the ML-scored attacker into Neo4j
     driver = request.app.state.neo4j
     async with driver.session() as session:
         await session.run(
@@ -279,13 +301,11 @@ async def simulate_exploit(request: Request = None):
             address=attacker_address,
             risk_score=dynamic_risk_score,
             tx_count=tx_count,
-            balance=round(sum(t["value_eth"] for t in tx_history) * 0.01, 4), # simulate current balance
+            balance=round(sum(t["value_eth"] for t in tx_history) * 0.01, 4),
         )
 
-        # Connect it to 3 existing random wallets for visual drama
         victims_result = await session.run(
-            "MATCH (w:Wallet) WHERE w.address <> $addr "
-            "RETURN w.address AS addr ORDER BY rand() LIMIT 3",
+            "MATCH (w:Wallet) WHERE w.address <> $addr RETURN w.address AS addr ORDER BY rand() LIMIT 3",
             addr=attacker_address,
         )
         victims = [r["addr"] async for r in victims_result]
@@ -306,9 +326,8 @@ async def simulate_exploit(request: Request = None):
                 gas=random.randint(150_000, 500_000),
             )
 
-    logger.warning("🚨 Exploit simulated — attacker wallet injected: %s (ML Score: %.3f)", attacker_address, dynamic_risk_score)
+    logger.warning("🚨 Exploit simulated — attacker wallet injected: %s", attacker_address)
 
-    # 4. Generate instant forensic report using the dynamic ML signals
     report = await generate_forensic_report(
         wallet_address=attacker_address,
         risk_score=dynamic_risk_score,
@@ -319,17 +338,147 @@ async def simulate_exploit(request: Request = None):
     return {
         "attacker_address": attacker_address,
         "ml_score": dynamic_risk_score,
-        "ml_raw_features": ml_result.raw_features,
         "victims": victims,
         "report": report,
     }
 
 
-
 @app.get("/api/anomalies", tags=["Detection"])
-async def list_anomalies(min_risk: float = 0.7):
-    """
-    Return wallets with risk score above threshold.
-    TODO (Member 1): Query Neo4j and return Celery task status.
-    """
-    return {"anomalies": [], "threshold": min_risk}
+async def list_anomalies(min_risk: float = 0.7, request: Request = None):
+    driver = request.app.state.neo4j
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (w:Wallet)
+            WHERE w.risk_score >= $min_risk
+            RETURN
+                w.address     AS address,
+                w.label       AS label,
+                w.risk_score  AS riskScore,
+                w.flagged     AS flagged,
+                w.tx_count    AS txCount,
+                w.balance_eth AS balanceEth
+            ORDER BY w.risk_score DESC
+            LIMIT 100
+            """,
+            min_risk=min_risk,
+        )
+        rows = await result.data()
+
+    anomalies = [
+        {
+            "address":    r["address"],
+            "label":      r["label"]     or "unknown",
+            "riskScore":  float(r["riskScore"] or 0.0),
+            "flagged":    bool(r["flagged"]   or False),
+            "txCount":    int(r["txCount"]    or 0),
+            "balanceEth": float(r["balanceEth"] or 0.0),
+        }
+        for r in rows
+    ]
+
+    return {
+        "anomalies":  anomalies,
+        "count":      len(anomalies),
+        "threshold":  min_risk,
+    }
+
+
+class ShieldRequest(BaseModel):
+    wallet_address: str
+    risk_score: float
+    reason: str = "Automated detection by Third Eye"
+
+
+@app.post("/api/shield/blacklist", tags=["Shield"])
+async def shield_blacklist(body: ShieldRequest):
+    """Backend-signed blacklist call using OPERATOR_PRIVATE_KEY."""
+    import asyncio
+    import httpx
+    from eth_account import Account
+    from eth_abi import encode as abi_encode
+
+    rpc_url = os.getenv("WEB3_RPC_URL", "https://sepolia.base.org")
+    priv_key = os.getenv("OPERATOR_PRIVATE_KEY")
+    contract_addr = os.getenv("GUARDIAN_CONTRACT_ADDRESS", "0xd9145CCE52D386f254917e481eB44e9943F39138")
+
+    if not priv_key:
+        return JSONResponse(status_code=503, content={"detail": "OPERATOR_PRIVATE_KEY not set"})
+
+    try:
+        from eth_utils import keccak
+        fn_sig = b"blacklistWallet(address,uint256,string)"
+        selector = keccak(fn_sig)[:4]
+        risk_uint = int(body.risk_score * 1000)
+        encoded_args = abi_encode(["address", "uint256", "string"], [body.wallet_address, risk_uint, body.reason])
+        calldata = "0x" + selector.hex() + encoded_args.hex()
+
+        account = Account.from_key(priv_key)
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            async def rpc(method, params):
+                r = await client.post(rpc_url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+                res = r.json()
+                if "error" in res:
+                    raise Exception(f"RPC Error ({method}): {res['error'].get('message', 'Unknown error')}")
+                return res
+
+            res_nonce = await rpc("eth_getTransactionCount", [account.address, "latest"])
+            nonce = int(res_nonce["result"], 16)
+            
+            res_gas = await rpc("eth_gasPrice", [])
+            gas_price = int(res_gas["result"], 16)
+            
+            res_chain = await rpc("eth_chainId", [])
+            chain_id = int(res_chain["result"], 16)
+
+            tx = {
+                "nonce":    nonce,
+                "gasPrice": gas_price,
+                "gas":      200000,
+                "to":       contract_addr,
+                "value":    0,
+                "data":     calldata,
+                "chainId":  chain_id,
+            }
+            signed = account.sign_transaction(tx)
+            raw_tx_hex = signed.rawTransaction.hex()
+            if not raw_tx_hex.startswith("0x"):
+                raw_tx_hex = "0x" + raw_tx_hex
+            
+            send_res = await rpc("eth_sendRawTransaction", [raw_tx_hex])
+            tx_hash = send_res["result"]
+
+            block_number = None
+            for _ in range(30):
+                await asyncio.sleep(2)
+                res_receipt = await rpc("eth_getTransactionReceipt", [tx_hash])
+                receipt = res_receipt.get("result")
+                if receipt:
+                    block_number = int(receipt["blockNumber"], 16)
+                    if int(receipt.get("status", "0x0"), 16) == 0:
+                        raise Exception("Transaction reverted on-chain (check operator role)")
+                    break
+
+        logger.info(f"Shield confirmed for {body.wallet_address}: tx={tx_hash}, block={block_number}")
+        return {
+            "status":         "blacklisted",
+            "wallet_address": body.wallet_address,
+            "tx_hash":        tx_hash,
+            "block_number":   block_number,
+            "risk_score":     body.risk_score,
+        }
+    except Exception as exc:
+        err_msg = str(exc)
+        if "replacement transaction underpriced" in err_msg or "nonce too low" in err_msg:
+            logger.warning(f"Duplicate shield request for {body.wallet_address} ignored (already pending).")
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content={"detail": "A shield request is already pending. Please wait for it to confirm."},
+            )
+            
+        logger.error(f"Shield blacklist failed: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": str(exc)},
+        )

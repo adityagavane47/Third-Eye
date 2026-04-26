@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import Galaxy3D, { type GalaxyNode, type GraphData } from "../components/Galaxy3D";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
+import { useShield } from "../hooks/useShield";
 
 // Use relative paths so Vite's proxy (/api → localhost:8000) handles routing.
 // This eliminates CORS errors entirely in development.
@@ -17,6 +18,16 @@ const EMPTY_GRAPH: GraphData = { nodes: [], links: [] };
 
 export default function Dashboard() {
   const { authenticated, walletAddress, login, logout } = useAuth();
+
+  // On-chain shield hook — connects to ThirdEyeGuardian.sol on Base Sepolia
+  const {
+    blacklistWallet,
+    txStatus,
+    txHash,
+    error: shieldError,
+    resetStatus,
+  } = useShield();
+
   const [graphData, setGraphData] = useState<GraphData>(EMPTY_GRAPH);
   const [selectedNode, setSelectedNode] = useState<GalaxyNode | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -78,13 +89,21 @@ export default function Dashboard() {
   };
 
   const simulateExploit = async () => {
-    setSimulating(true);
-    showToast("\ud83d\udea8 Injecting exploit wallet into the galaxy\u2026", "info");
+    // Guard: wallet must be connected to sign the on-chain blacklist tx
+    if (!authenticated) {
+      showToast("Connect your wallet first to activate the on-chain shield.", "error");
+      login();
+      return;
+    }
 
-    // Open the sidebar immediately with a placeholder so something shows right away
+    resetStatus();
+    setSimulating(true);
+    showToast("🚨 Injecting exploit wallet into the galaxy…", "info");
+
+    // Show placeholder sidebar immediately
     const placeholderNode: GalaxyNode = {
       id: "simulating",
-      address: "0xDetecting\u2026",
+      address: "0xDetecting…",
       label: "attacker",
       riskScore: 0.98,
       flagged: true,
@@ -96,28 +115,63 @@ export default function Dashboard() {
     setAlertMode(true);
 
     try {
+      // Step 1: Inject attacker into Neo4j via ML pipeline
       const res = await fetch("/api/simulate-exploit", { method: "POST" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`Backend HTTP ${res.status}`);
       const data = await res.json();
 
-      // Update sidebar with real attacker node
+      const attackerAddress: string = data.attacker_address;
+      const mlRiskScore: number    = data.ml_score ?? 0.98;
+
+      // Update sidebar with real attacker
       const attackerNode: GalaxyNode = {
-        id: data.attacker_address,
-        address: data.attacker_address,
-        label: "attacker",
-        riskScore: 0.98,
-        flagged: true,
-        txCount: 150,
+        id:         attackerAddress,
+        address:    attackerAddress,
+        label:      "attacker",
+        riskScore:  mlRiskScore,
+        flagged:    true,
+        txCount:    150,
         balanceEth: 5.0,
       };
       setSelectedNode(attackerNode);
 
-      // Refresh graph in background
+      // Step 2: Backend-signed blacklist on Base Sepolia (via OPERATOR_PRIVATE_KEY)
+      showToast("⏳ Confirming on Base Sepolia…", "info");
+      const shieldRes = await fetch("/api/shield/blacklist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet_address: attackerAddress,
+          risk_score:     mlRiskScore,
+          reason:         "Automated detection: Simulated exploit pattern — ML + PSI confirmed",
+        }),
+      });
+      const shieldData = await shieldRes.json();
+
+      // Step 3: Handle on-chain result
+      if (shieldRes.ok && shieldData.tx_hash) {
+        const h = shieldData.tx_hash as string;
+        showToast(
+          `✅ Shield Activated — Blacklisted on Base Sepolia\nTx: ${h.slice(0, 12)}…${h.slice(-6)}`,
+          "success",
+        );
+      } else {
+        const detail = shieldData.detail ?? "Unknown error";
+        const isOperator = detail.toLowerCase().includes("operator") ||
+                           detail.toLowerCase().includes("access");
+        showToast(
+          isOperator
+            ? "Missing Operator Role — wallet not granted on ThirdEyeGuardian.sol"
+            : `Shield tx failed: ${detail}`,
+          "error",
+        );
+      }
+
+      // Refresh graph regardless of tx outcome
       fetchGraph();
-      showToast("\u2705 Shield Activated \u2014 Attacker blacklisted on Base Sepolia", "success");
+
     } catch (err: any) {
-      showToast(`Backend: ${err?.message ?? "fetch failed"} \u2014 demo mode`, "error");
-      // Sidebar stays open even on failure for demo purposes
+      showToast(`Backend: ${err?.message ?? "fetch failed"} — demo mode`, "error");
     } finally {
       setSimulating(false);
     }
@@ -130,7 +184,7 @@ export default function Dashboard() {
       <nav style={styles.nav}>
         <div style={styles.navBrand}>
           <span style={styles.navLogo}>🛡</span>
-          <span style={styles.navTitle}>SENTINEL GALAXY</span>
+          <span style={styles.navTitle}>Third Eye</span>
           {alertMode && (
             <span style={styles.alertPill}>⚠ THREATS ACTIVE</span>
           )}
@@ -158,10 +212,16 @@ export default function Dashboard() {
           <button onClick={handleOpenPanel} style={styles.refreshBtn}>🔍 Inspect Node</button>
           <button
             onClick={simulateExploit}
-            disabled={simulating}
-            style={{ ...styles.exploitBtn, opacity: simulating ? 0.6 : 1 }}
+            disabled={simulating || txStatus === "pending" || txStatus === "confirming"}
+            style={{ ...styles.exploitBtn, opacity: (simulating || txStatus === "pending" || txStatus === "confirming") ? 0.6 : 1 }}
           >
-            {simulating ? "⏳ Injecting…" : "💀 Simulate Exploit"}
+            {txStatus === "confirming"
+              ? "⏳ Confirming on-chain…"
+              : txStatus === "pending"
+              ? "⏳ Sending tx…"
+              : simulating
+              ? "⏳ Injecting…"
+              : "💀 Simulate Exploit"}
           </button>
           {authenticated ? (
             <div style={styles.walletGroup}>
@@ -205,7 +265,7 @@ export default function Dashboard() {
           {loading ? (
             <div style={styles.loadingScreen}>
               <div style={styles.loadingSpinner} />
-              <p style={styles.loadingText}>Initializing Sentinel Galaxy…</p>
+              <p style={styles.loadingText}>Initializing Third Eye…</p>
             </div>
           ) : (
             <Galaxy3D

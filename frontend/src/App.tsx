@@ -5,7 +5,7 @@
  * is configured. Falls back to dev mode (no auth) otherwise.
  *
  * Chain: Base Sepolia (84532) is both the default and the only supported chain.
- * Theme: Dark + Sentinel Galaxy accent (#00D4FF)
+ * Theme: Dark + Third Eye accent (#00D4FF)
  */
 
 import type { Chain } from "@privy-io/react-auth";
@@ -38,7 +38,7 @@ export default function App() {
   if (!HAS_PRIVY) {
     // Dev mode: no Privy App ID configured — render dashboard directly.
     // Auth buttons will show "Connect Wallet" with no-op handlers.
-    console.info("[Sentinel Galaxy] VITE_PRIVY_APP_ID not set — running in dev mode without auth.");
+    console.info("[Third Eye] VITE_PRIVY_APP_ID not set — running in dev mode without auth.");
     return <Dashboard />;
   }
 
@@ -53,7 +53,7 @@ export default function App() {
         appearance: {
           theme: "dark",
           accentColor: "#00D4FF",
-          logo: "https://sentinel-galaxy.vercel.app/logo.svg",
+          logo: "https://Third Eye-galaxy.vercel.app/logo.svg",
           showWalletLoginFirst: false,
         },
         defaultChain: BASE_SEPOLIA,

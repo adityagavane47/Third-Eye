@@ -16,11 +16,11 @@ from neo4j import AsyncGraphDatabase, AsyncDriver, AsyncSession
 
 load_dotenv()
 
-logger = logging.getLogger("sentinel.database")
+logger = logging.getLogger("Third Eye.database")
 
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_AUTH_RAW = os.getenv("NEO4J_AUTH", "neo4j/password")
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "sentinelgalaxy")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "Third Eye")
 
 _username, _password = NEO4J_AUTH_RAW.split("/", 1)
 NEO4J_AUTH = (_username, _password)

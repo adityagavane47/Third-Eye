@@ -2,9 +2,9 @@
 pragma solidity ^0.8.20;
 
 /**
- * @title  SatarkGuardian
- * @author Sentinel Galaxy — Web3 Enforcer (Member 2)
- * @notice On-Chain Immunity Contract for the Sentinel Galaxy system.
+ * @title  ThirdEyeGuardian
+ * @author Third Eye — Web3 Enforcer (Member 2)
+ * @notice On-Chain Immunity Contract for the Third Eye system.
  *         Maintains a blacklist of malicious wallet addresses and provides
  *         a guardian shield that can block flagged addresses from interacting
  *         with protected DeFi protocols.
@@ -16,16 +16,16 @@ pragma solidity ^0.8.20;
  *   ForensicAgent (AI) → Celery task → Backend API
  *         │
  *         ▼
- *   useShield.ts (Frontend) → SatarkGuardian.blacklistWallet()
+ *   useShield.ts (Frontend) → ThirdEyeGuardian.blacklistWallet()
  *         │
  *         ▼
- *   Protected contracts query: SatarkGuardian.isBlacklisted(address)
+ *   Protected contracts query: ThirdEyeGuardian.isBlacklisted(address)
  */
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
-contract SatarkGuardian is Ownable, Pausable {
+contract ThirdEyeGuardian is Ownable, Pausable {
     // ── Events ────────────────────────────────────────────────
 
     /// @notice Emitted when a wallet is added to the blacklist
@@ -57,13 +57,13 @@ contract SatarkGuardian is Ownable, Pausable {
         uint256 riskScore;      // 0–1000 (maps to 0.000–1.000 in backend)
         string  reason;
         uint256 flaggedAt;
-        address flaggedBy;      // The Sentinel operator who flagged
+        address flaggedBy;      // The Third Eye operator who flagged
     }
 
     mapping(address => BlacklistEntry) private _blacklist;
 
-    /// @dev Addresses authorized to submit blacklist entries (Sentinel operators)
-    mapping(address => bool) public sentinelOperators;
+    /// @dev Addresses authorized to submit blacklist entries (Third Eye operators)
+    mapping(address => bool) public thirdEyeOperators;
 
     /// @dev Count of currently blacklisted addresses
     uint256 public blacklistCount;
@@ -75,8 +75,8 @@ contract SatarkGuardian is Ownable, Pausable {
 
     modifier onlyOperator() {
         require(
-            sentinelOperators[msg.sender] || msg.sender == owner(),
-            "SatarkGuardian: caller is not a Sentinel operator"
+            thirdEyeOperators[msg.sender] || msg.sender == owner(),
+            "ThirdEyeGuardian: caller is not a Third Eye operator"
         );
         _;
     }
@@ -84,7 +84,7 @@ contract SatarkGuardian is Ownable, Pausable {
     modifier notBlacklisted(address wallet) {
         require(
             !_blacklist[wallet].active,
-            "SatarkGuardian: wallet is blacklisted"
+            "ThirdEyeGuardian: wallet is blacklisted"
         );
         _;
     }
@@ -92,17 +92,17 @@ contract SatarkGuardian is Ownable, Pausable {
     // ── Constructor ───────────────────────────────────────────
 
     /**
-     * @param initialOwner Address of the deploying Sentinel operator (multi-sig recommended)
+     * @param initialOwner Address of the deploying Third Eye operator (multi-sig recommended)
      */
     constructor(address initialOwner) Ownable(initialOwner) {
-        sentinelOperators[initialOwner] = true;
+        thirdEyeOperators[initialOwner] = true;
     }
 
     // ── Blacklist Management ──────────────────────────────────
 
     /**
      * @notice Add a wallet to the on-chain blacklist.
-     * @dev    Only callable by Sentinel operators.
+     * @dev    Only callable by Third Eye operators.
      *         riskScore must exceed riskThreshold.
      *
      * @param wallet     Address to blacklist
@@ -114,10 +114,10 @@ contract SatarkGuardian is Ownable, Pausable {
         uint256 riskScore,
         string calldata reason
     ) external onlyOperator whenNotPaused {
-        require(wallet != address(0), "SatarkGuardian: zero address");
-        require(wallet != owner(), "SatarkGuardian: cannot blacklist owner");
-        require(riskScore >= riskThreshold, "SatarkGuardian: risk score below threshold");
-        require(!_blacklist[wallet].active, "SatarkGuardian: already blacklisted");
+        require(wallet != address(0), "ThirdEyeGuardian: zero address");
+        require(wallet != owner(), "ThirdEyeGuardian: cannot blacklist owner");
+        require(riskScore >= riskThreshold, "ThirdEyeGuardian: risk score below threshold");
+        require(!_blacklist[wallet].active, "ThirdEyeGuardian: already blacklisted");
 
         _blacklist[wallet] = BlacklistEntry({
             active:    true,
@@ -139,7 +139,7 @@ contract SatarkGuardian is Ownable, Pausable {
      * @param wallet Address to whitelist
      */
     function whitelistWallet(address wallet) external onlyOwner {
-        require(_blacklist[wallet].active, "SatarkGuardian: not blacklisted");
+        require(_blacklist[wallet].active, "ThirdEyeGuardian: not blacklisted");
 
         delete _blacklist[wallet];
         blacklistCount--;
@@ -160,8 +160,8 @@ contract SatarkGuardian is Ownable, Pausable {
         uint256[] calldata riskScores,
         string calldata reason
     ) external onlyOperator whenNotPaused {
-        require(wallets.length == riskScores.length, "SatarkGuardian: length mismatch");
-        require(wallets.length <= 100, "SatarkGuardian: max 100 per batch");
+        require(wallets.length == riskScores.length, "ThirdEyeGuardian: length mismatch");
+        require(wallets.length <= 100, "ThirdEyeGuardian: max 100 per batch");
 
         for (uint256 i = 0; i < wallets.length; i++) {
             if (
@@ -190,7 +190,7 @@ contract SatarkGuardian is Ownable, Pausable {
      *
      *         Usage in a protected protocol:
      *         ```
-     *         ISatarkGuardian guardian = ISatarkGuardian(GUARDIAN_ADDRESS);
+     *         IThirdEyeGuardian guardian = IThirdEyeGuardian(GUARDIAN_ADDRESS);
      *         guardian.shield(msg.sender); // Reverts if blacklisted
      *         ```
      *
@@ -201,7 +201,7 @@ contract SatarkGuardian is Ownable, Pausable {
             emit ShieldActivated(msg.sender, caller, block.timestamp);
             revert(
                 string(abi.encodePacked(
-                    "SatarkGuardian: address blocked | risk=",
+                    "ThirdEyeGuardian: address blocked | risk=",
                     _uintToString(_blacklist[caller].riskScore),
                     " | ",
                     _blacklist[caller].reason
@@ -233,19 +233,19 @@ contract SatarkGuardian is Ownable, Pausable {
     // ── Admin ─────────────────────────────────────────────────
 
     /**
-     * @notice Grant Sentinel operator role to an address.
+     * @notice Grant Third Eye operator role to an address.
      * @param operator Address to authorize (e.g., backend signing key)
      */
     function addOperator(address operator) external onlyOwner {
-        sentinelOperators[operator] = true;
+        thirdEyeOperators[operator] = true;
     }
 
     /**
-     * @notice Revoke Sentinel operator role.
+     * @notice Revoke Third Eye operator role.
      * @param operator Address to deauthorize
      */
     function removeOperator(address operator) external onlyOwner {
-        sentinelOperators[operator] = false;
+        thirdEyeOperators[operator] = false;
     }
 
     /**
@@ -253,7 +253,7 @@ contract SatarkGuardian is Ownable, Pausable {
      * @param newThreshold Value between 0–1000 (recommended: ≥ 700)
      */
     function setRiskThreshold(uint256 newThreshold) external onlyOwner {
-        require(newThreshold <= 1000, "SatarkGuardian: threshold out of range");
+        require(newThreshold <= 1000, "ThirdEyeGuardian: threshold out of range");
         riskThreshold = newThreshold;
     }
 

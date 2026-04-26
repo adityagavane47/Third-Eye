@@ -257,7 +257,7 @@ export default function Galaxy3D({
             animation: "pulse 1.5s ease-in-out infinite",
           }}
         >
-          🚨 THREAT DETECTED — SENTINEL ACTIVE
+          🚨 THREAT DETECTED — Third Eye ACTIVE
         </div>
       )}
 

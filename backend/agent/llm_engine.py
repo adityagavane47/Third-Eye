@@ -14,10 +14,10 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-logger = logging.getLogger("sentinel.llm_engine")
+logger = logging.getLogger("Third Eye.llm_engine")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL   = "llama3-8b-8192"
+GROQ_MODEL   = "llama-3.1-8b-instant"
 
 # Risk signal library — injected into the prompt for richer context
 RISK_SIGNALS = {
@@ -64,7 +64,7 @@ async def generate_forensic_report(
             client = AsyncGroq(api_key=GROQ_API_KEY)
 
             signals_text = "\n".join(f"  • {h}" for h in risk_hints)
-            prompt = f"""You are a blockchain forensic analyst for Sentinel Galaxy, an on-chain immunity system.
+            prompt = f"""You are a blockchain forensic analyst for Third Eye, an on-chain immunity system.
 
 Analyze this wallet and produce a concise threat report:
 
@@ -145,7 +145,7 @@ def _local_fallback(
             f"and poses a significant risk to connected DeFi protocols."
         ),
         "recommended_actions": [
-            "Immediately blacklist on SatarkGuardian contract",
+            "Immediately blacklist on ThirdEyeGuardian contract",
             "Trace all connected wallets within 2 hops",
             "Alert downstream protocol integrators",
             "Submit evidence bundle to on-chain governance",

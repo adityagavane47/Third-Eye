@@ -1,10 +1,10 @@
 /**
- * frontend/src/hooks/useShield.ts — SatarkGuardian Contract Hook
+ * frontend/src/hooks/useShield.ts — ThirdEyeGuardian Contract Hook
  * Role: Web3 Enforcer (Member 2)
  *
  * Custom React hook that:
  * 1. Uses Privy for wallet connection (2026 Web3 onboarding standard)
- * 2. Provides typed methods to interact with SatarkGuardian.sol
+ * 2. Provides typed methods to interact with ThirdEyeGuardian.sol
  * 3. Handles Base Sepolia network switching automatically
  * 4. Exposes transaction state for the Sidebar UI component
  */
@@ -146,7 +146,7 @@ export function useShield(): UseShieldReturn {
   }, [authenticated, login]);
 
   /**
-   * Blacklist a wallet on-chain via SatarkGuardian.blacklistWallet().
+   * Blacklist a wallet on-chain via ThirdEyeGuardian.blacklistWallet().
    * @param wallet     Ethereum address to blacklist
    * @param riskScore  Float 0.0–1.0 (converted to 0–1000 uint256)
    * @param reason     Human-readable reason from ForensicAgent

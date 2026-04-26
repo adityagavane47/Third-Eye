@@ -1,11 +1,9 @@
 """
 backend/core/psi_engine.py — Pattern-Signature Intelligence Engine
-Ported from Satark PSIEngine (Simulated Homomorphic Encryption + Pattern Matching)
 
 Two-layer threat detection:
-  Layer 1: PSI (Private Set Intersection) — checks wallet/contract addresses
-            against known malicious sets using salted SHA-256 ciphertexts.
-  Layer 2: Signature matching — detects known exploit patterns in tx graph structure.
+  Layer 1: PSI (salted SHA-256 private set intersection) — address blacklist matching.
+  Layer 2: Structural motif matching — Sandwich Attacks, Bridge Exploits, etc.
 """
 
 import hashlib
@@ -13,33 +11,32 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 
-logger = logging.getLogger("sentinel.psi_engine")
+logger = logging.getLogger("Third Eye.psi_engine")
 
 
-# ── Exploit Categories ────────────────────────────────────────────
+# ── Exploit Categories ─────────────────────────────────────────────
 class ExploitCategory(str, Enum):
-    REENTRANCY = "reentrancy"
-    FLASH_LOAN = "flash_loan"
-    PRICE_MANIPULATION = "price_manipulation"
-    SANDWICH_ATTACK = "sandwich_attack"
-    GOVERNANCE_ATTACK = "governance_attack"
-    BRIDGE_EXPLOIT = "bridge_exploit"
-    PSI_ADDRESS_HIT = "psi_address_hit"    # Direct address match via PSI
-    UNKNOWN = "unknown"
+    REENTRANCY          = "reentrancy"
+    FLASH_LOAN          = "flash_loan"
+    PRICE_MANIPULATION  = "price_manipulation"
+    SANDWICH_ATTACK     = "sandwich_attack"
+    GOVERNANCE_ATTACK   = "governance_attack"
+    BRIDGE_EXPLOIT      = "bridge_exploit"
+    PSI_ADDRESS_HIT     = "psi_address_hit"
+    UNKNOWN             = "unknown"
 
 
 @dataclass
 class SignatureMatch:
-    """A confirmed pattern match against the exploit signature database."""
     signature_id: str
     category: ExploitCategory
-    confidence: float                       # 0.0 → 1.0
+    confidence: float
     matched_addresses: list[str] = field(default_factory=list)
     description: str = ""
-    cve_reference: str | None = None        # e.g., "SWC-107" for reentrancy
+    cve_reference: str | None = None
 
 
-# ── Known Exploit Signatures ──────────────────────────────────────
+# ── Signature Database ─────────────────────────────────────────────
 SIGNATURE_DATABASE: list[dict] = [
     {
         "id": "PSI-001",
@@ -48,7 +45,6 @@ SIGNATURE_DATABASE: list[dict] = [
         "pattern": "CALL → balance_check_missing → recursive_CALL",
         "swc": "SWC-107",
         "description": "Contract calls external address before updating internal state",
-        # Heuristic thresholds used by match()
         "min_reentrancy_depth": 3,
     },
     {
@@ -74,7 +70,8 @@ SIGNATURE_DATABASE: list[dict] = [
         "category": ExploitCategory.SANDWICH_ATTACK,
         "pattern": "frontrun_tx → victim_tx → backrun_tx",
         "description": "MEV bot sandwiches user transaction for guaranteed profit",
-        "min_tx_burst": 5,
+        # Structural: requires at least 3 txs to/from same target in tight sequence
+        "min_sandwich_seq": 3,
         "max_time_window_s": 30,
     },
     {
@@ -82,183 +79,161 @@ SIGNATURE_DATABASE: list[dict] = [
         "name": "Bridge Double-Spend Exploit",
         "category": ExploitCategory.BRIDGE_EXPLOIT,
         "pattern": "deposit → fake_relay → double_withdraw",
-        "description": "Cross-chain bridge manipulated to withdraw more than deposited",
-        "min_value_eth": 10.0,
+        "description": "Cross-chain bridge manipulated — outgoing value far exceeds incoming",
+        # Structural: outgoing ETH > incoming ETH by a large factor with few contracts
+        "min_outgoing_ratio": 2.0,
+        "max_unique_contracts": 3,
+        "min_value_eth": 5.0,
     },
 ]
 
 
-# ── Layer 1: Private Set Intersection (Satark Port) ───────────────
-class SatarkPSI:
+# ── Layer 1: ThirdEyePSI ─────────────────────────────────────────────
+class ThirdEyePSI:
     """
-    Simulated Private Set Intersection using salted SHA-256 hashes.
-
-    In a production system this would use Paillier or ElGamal homomorphic
-    encryption. For Sentinel Galaxy, we use SHA-256 to represent 'ciphertexts'
-    so that plaintext addresses are never directly compared — preserving the
-    PSI privacy model while being computationally feasible.
-
-    Ported directly from Satark PSIEngine (Satark.sec/psi_engine.py).
+    Simulated Private Set Intersection using salted SHA-256.
+    Plaintext addresses are never directly compared — the hash
+    acts as a 'ciphertext' that preserves the PSI privacy model.
     """
 
-    SALT = "SATARK_PSI_SALT_2026"
+    SALT = "ThirdEye_PSI_SALT_2026"
 
     def __init__(self, salt: str = SALT):
         self.salt = salt
-        # Known-malicious address ciphertexts (populated by load_blacklist)
         self._encrypted_blacklist: set[str] = set()
-        logger.info("SatarkPSI initialized with salt prefix: %s…", salt[:10])
+        logger.info("ThirdEyePSI initialised (salt prefix: %s…)", salt[:10])
+
+    def _cipher(self, token: str) -> str:
+        return hashlib.sha256((self.salt + token.lower()).encode()).hexdigest()
 
     def encrypt_set(self, tokens: list[str]) -> list[str]:
-        """
-        Simulates encrypting a set of tokens (addresses, tx hashes) into ciphertexts.
-        Identical tokens always produce identical ciphertexts (deterministic).
-
-        Args:
-            tokens: List of plaintext addresses or identifiers
-
-        Returns:
-            List of SHA-256 hex ciphertexts
-        """
-        return [
-            hashlib.sha256((self.salt + str(t).lower()).encode()).hexdigest()
-            for t in tokens
-        ]
+        return [self._cipher(t) for t in tokens]
 
     def intersect(self, set_a: list[str], set_b: list[str]) -> list[str]:
-        """
-        Calculates PSI intersection on 'encrypted' ciphertext sets.
-        Returns the intersecting ciphertexts (cannot be reversed to plaintext).
-
-        Args:
-            set_a: First encrypted set
-            set_b: Second encrypted set
-
-        Returns:
-            List of ciphertexts present in both sets
-        """
-        return list(set(set_a).intersection(set(set_b)))
+        return list(set(set_a).intersection(set_b))
 
     def load_blacklist(self, known_bad_addresses: list[str]) -> int:
-        """
-        Pre-encrypt a list of known malicious addresses into the internal blacklist.
-        Call this once at startup with addresses from Neo4j or an external threat feed.
-
-        Args:
-            known_bad_addresses: List of plaintext 0x... addresses
-
-        Returns:
-            Number of addresses loaded
-        """
         self._encrypted_blacklist = set(self.encrypt_set(known_bad_addresses))
-        logger.info("PSI blacklist loaded: %d addresses encrypted", len(self._encrypted_blacklist))
+        logger.info("PSI blacklist loaded: %d addresses", len(self._encrypted_blacklist))
         return len(self._encrypted_blacklist)
 
     def check_addresses(self, addresses: list[str]) -> list[str]:
-        """
-        Check a list of plaintext addresses against the encrypted blacklist via PSI.
-
-        Args:
-            addresses: List of plaintext 0x... addresses to check
-
-        Returns:
-            List of addresses that matched the blacklist (plaintext, recoverable from
-            input since we hold both sides in this simulation)
-        """
         if not self._encrypted_blacklist:
             return []
-
-        encrypted_query = self.encrypt_set(addresses)
-        hit_ciphertexts = set(self.intersect(encrypted_query, list(self._encrypted_blacklist)))
-
-        # Map ciphertexts back to original addresses (we hold the plaintext side)
-        hits = []
-        for addr, cipher in zip(addresses, encrypted_query):
-            if cipher in hit_ciphertexts:
-                hits.append(addr)
-        return hits
+        ciphered = self.encrypt_set(addresses)
+        hit_set = set(self.intersect(ciphered, list(self._encrypted_blacklist)))
+        return [addr for addr, c in zip(addresses, ciphered) if c in hit_set]
 
 
-# ── Layer 2: Pattern-Signature Matching ───────────────────────────
-def _extract_tx_features(tx_graph: list[dict]) -> dict:
-    """Summarize a transaction graph into heuristic features for pattern matching."""
+# ── Layer 2: Structural Motif Extraction ──────────────────────────
+def _extract_structural_features(tx_graph: list[dict]) -> dict:
+    """
+    Extracts structural motifs from a transaction graph, enabling detection
+    of Sandwich Attacks, Bridge Exploits, and temporal patterns.
+    """
     if not tx_graph:
         return {}
 
-    targets = [t.get("to", "") for t in tx_graph]
-    gas_values = [t.get("gas_used", 21_000) for t in tx_graph]
-    values = [t.get("value_eth", 0.0) for t in tx_graph]
-    timestamps = sorted([t.get("timestamp", 0) for t in tx_graph if t.get("timestamp")])
+    targets   = [t.get("to", "")        for t in tx_graph]
+    gas_vals  = [t.get("gas_used", 21_000) or 21_000 for t in tx_graph]
+    eth_vals  = [t.get("value_eth", 0.0) or 0.0 for t in tx_graph]
+    timestamps = sorted(
+        [t.get("timestamp", 0) for t in tx_graph if t.get("timestamp")],
+        key=float,
+    )
+    incoming_vals = [t.get("incoming_eth", 0.0) or 0.0 for t in tx_graph]
 
-    time_window_s = (timestamps[-1] - timestamps[0]) if len(timestamps) >= 2 else 9999
+    time_window_s = (
+        float(timestamps[-1]) - float(timestamps[0])
+        if len(timestamps) >= 2 else 9999.0
+    )
+
+    total_outgoing = sum(eth_vals)
+    total_incoming = sum(incoming_vals)
+
+    # Sandwich detection: same target hit 3+ times in rapid succession
+    target_counts = {t: targets.count(t) for t in set(targets) if t}
+    max_target_hit = max(target_counts.values()) if target_counts else 0
 
     return {
-        "tx_count": len(tx_graph),
-        "unique_contracts": len(set(targets)),
-        "max_gas": max(gas_values),
-        "max_value_eth": max(values) if values else 0.0,
-        "reentrancy_depth": max(targets.count(t) for t in set(targets)) if targets else 0,
-        "time_window_s": time_window_s,
+        "tx_count":          len(tx_graph),
+        "unique_contracts":  len(set(t for t in targets if t)),
+        "max_gas":           max(gas_vals),
+        "max_value_eth":     max(eth_vals) if eth_vals else 0.0,
+        "total_outgoing":    total_outgoing,
+        "total_incoming":    total_incoming,
+        "outgoing_ratio":    (total_outgoing / total_incoming) if total_incoming > 0 else 0.0,
+        "reentrancy_depth":  max(target_counts.values()) if target_counts else 0,
+        "max_target_hit":    max_target_hit,
+        "time_window_s":     time_window_s,
     }
 
 
-def _match_signature(sig: dict, features: dict) -> float:
+# ── Layer 2: Structural Motif Matching ────────────────────────────
+def _match_signature(sig: dict, f: dict) -> float:
     """
-    Heuristic confidence score for a single signature against extracted features.
-    Returns 0.0 if the pattern clearly doesn't match, >0 if it does.
+    Returns confidence score [0, 1] for a signature against extracted features.
+    0.0 = no match.
     """
     sid = sig["id"]
 
     if sid == "PSI-001":  # Reentrancy
-        depth = features.get("reentrancy_depth", 0)
+        depth = f.get("reentrancy_depth", 0)
         if depth >= sig.get("min_reentrancy_depth", 3):
-            return min(0.5 + (depth - 3) * 0.1, 0.95)
+            return min(0.50 + (depth - 3) * 0.10, 0.95)
 
-    elif sid == "PSI-002":  # Flash loan
-        if (features.get("max_gas", 0) >= sig.get("min_gas", 400_000) and
-                features.get("tx_count", 0) >= sig.get("min_tx_burst", 3)):
-            return 0.80
+    elif sid == "PSI-002":  # Flash loan oracle manipulation
+        if (
+            f.get("max_gas", 0) >= sig.get("min_gas", 400_000)
+            and f.get("tx_count", 0) >= sig.get("min_tx_burst", 3)
+        ):
+            # Stronger signal if both high gas AND high tx volume
+            confidence = 0.70 + 0.10 * min(f["tx_count"] / 10, 1.0)
+            return round(confidence, 2)
 
     elif sid == "PSI-003":  # Governance attack
-        if features.get("unique_contracts", 0) >= sig.get("min_unique_contracts", 4):
-            return 0.65
+        if f.get("unique_contracts", 0) >= sig.get("min_unique_contracts", 4):
+            return min(0.55 + f["unique_contracts"] * 0.02, 0.85)
 
-    elif sid == "PSI-004":  # Sandwich MEV
-        if (features.get("tx_count", 0) >= sig.get("min_tx_burst", 5) and
-                features.get("time_window_s", 9999) <= sig.get("max_time_window_s", 30)):
-            return 0.75
+    elif sid == "PSI-004":  # Sandwich MEV — structural motif
+        # Requires: same target hit repeatedly AND txs within a tight time window
+        if (
+            f.get("max_target_hit", 0) >= sig.get("min_sandwich_seq", 3)
+            and f.get("time_window_s", 9999) <= sig.get("max_time_window_s", 30)
+        ):
+            return min(0.70 + f["max_target_hit"] * 0.05, 0.95)
 
-    elif sid == "PSI-005":  # Bridge exploit
-        if features.get("max_value_eth", 0) >= sig.get("min_value_eth", 10.0):
-            return 0.60
+    elif sid == "PSI-005":  # Bridge exploit — structural motif
+        # Outgoing ETH significantly exceeds incoming with minimal contracts involved
+        if (
+            f.get("outgoing_ratio", 0.0) >= sig.get("min_outgoing_ratio", 2.0)
+            and f.get("unique_contracts", 999) <= sig.get("max_unique_contracts", 3)
+            and f.get("total_outgoing", 0.0) >= sig.get("min_value_eth", 5.0)
+        ):
+            ratio = f["outgoing_ratio"]
+            return min(0.60 + (ratio - 2.0) * 0.08, 0.92)
 
     return 0.0
 
 
-# ── Unified PSI Engine ────────────────────────────────────────────
+# ── Unified PSIEngine ──────────────────────────────────────────────
 class PSIEngine:
     """
-    Sentinel Galaxy Pattern-Signature Intelligence Engine.
+    Third Eye Pattern-Signature Intelligence Engine.
 
-    Combines:
-      - SatarkPSI (Layer 1): address-level PSI blacklist matching
-      - Signature DB (Layer 2): heuristic exploit pattern matching on tx graph
-
-    Interface contract with MLEngine:
-        PSIEngine results augment MLEngine.risk_hints before Gemini analysis.
-        tasks.py calls: psi_engine.match(wallet_address, tx_graph) → [SignatureMatch]
+    Layer 1: ThirdEyePSI — salted SHA-256 address blacklist matching.
+    Layer 2: Structural motif matching (Sandwich, Bridge, Reentrancy, etc.)
     """
 
     def __init__(self):
-        self.psi = SatarkPSI()
+        self.psi = ThirdEyePSI()
         self.signatures = SIGNATURE_DATABASE
         logger.info(
-            "PSIEngine initialized — %d signatures, PSI blacklist empty (call load_blacklist())",
+            "PSIEngine initialised — %d signatures loaded",
             len(self.signatures),
         )
 
     def load_blacklist(self, known_bad_addresses: list[str]) -> int:
-        """Populate the PSI blacklist. Call at startup with Neo4j flagged addresses."""
         return self.psi.load_blacklist(known_bad_addresses)
 
     def match(
@@ -268,22 +243,19 @@ class PSIEngine:
         related_addresses: list[str] | None = None,
     ) -> list[SignatureMatch]:
         """
-        Full two-layer scan for a wallet.
-
-        Layer 1: PSI check — is the wallet or any counterparty in the blacklist?
-        Layer 2: Signature check — does the tx graph match known exploit patterns?
+        Full two-layer scan.
 
         Args:
             wallet_address:     Target wallet (0x...)
             tx_graph:           List of tx edge dicts from Neo4j
-            related_addresses:  Additional addresses to PSI-check (counterparties)
+            related_addresses:  Additional counterparty addresses to PSI-check
 
         Returns:
-            List of SignatureMatch objects sorted by confidence (highest first)
+            List of SignatureMatch objects, sorted by confidence descending.
         """
         matches: list[SignatureMatch] = []
 
-        # ── Layer 1: PSI Address Check ────────────────────────────
+        # ── Layer 1: PSI blacklist check ─────────────────────────
         all_addresses = [wallet_address] + (related_addresses or [])
         psi_hits = self.psi.check_addresses(all_addresses)
         if psi_hits:
@@ -292,16 +264,19 @@ class PSIEngine:
                 category=ExploitCategory.PSI_ADDRESS_HIT,
                 confidence=0.95,
                 matched_addresses=psi_hits,
-                description=f"Address matched Sentinel Galaxy blacklist via PSI: {psi_hits}",
+                description=f"Address matched Third Eye blacklist via PSI: {psi_hits}",
             ))
-            logger.warning("PSI hit for %s — %d blacklisted address(es)", wallet_address, len(psi_hits))
+            logger.warning(
+                "PSI hit for %s — %d blacklisted address(es)",
+                wallet_address, len(psi_hits),
+            )
 
-        # ── Layer 2: Signature Pattern Matching ───────────────────
+        # ── Layer 2: Structural motif matching ───────────────────
         if not tx_graph:
-            logger.debug("PSIEngine.match(%s) — no tx_graph provided, skipping pattern check", wallet_address)
+            logger.debug("PSIEngine.match(%s) — empty tx_graph, skipping pattern check", wallet_address)
             return matches
 
-        features = _extract_tx_features(tx_graph)
+        features = _extract_structural_features(tx_graph)
 
         for sig in self.signatures:
             confidence = _match_signature(sig, features)
@@ -315,7 +290,7 @@ class PSIEngine:
                     cve_reference=sig.get("swc"),
                 ))
                 logger.info(
-                    "Signature match: %s [%s] confidence=%.2f for %s",
+                    "Signature match: %s [%s] conf=%.2f for %s",
                     sig["id"], sig["name"], confidence, wallet_address,
                 )
 
@@ -323,9 +298,8 @@ class PSIEngine:
         return matches
 
     def get_signature_by_id(self, sig_id: str) -> dict | None:
-        """Look up a signature definition by its PSI ID."""
         return next((s for s in self.signatures if s["id"] == sig_id), None)
 
 
-# ── Module-level singleton (Satark backward compat) ───────────────
-psi_service = SatarkPSI()
+# ── Module-level singleton ────────────────────────────────────────
+psi_service = ThirdEyePSI()

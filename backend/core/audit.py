@@ -1,6 +1,6 @@
 """
-backend/core/audit.py — Sentinel Galaxy WORM Audit Trail
-Ported from Satark audit.py (Write-Once-Read-Many compliant logging)
+backend/core/audit.py — Third Eye WORM Audit Trail
+Ported from ThirdEye audit.py (Write-Once-Read-Many compliant logging)
 
 All entries are append-only JSON lines — no record is ever modified or deleted.
 SHA-256 checksums are computed per entry for tamper detection.
@@ -16,19 +16,19 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
-logger = logging.getLogger("sentinel.audit")
+logger = logging.getLogger("Third Eye.audit")
 
 # ── File Paths ────────────────────────────────────────────────────
-WORM_LOG_FILE = Path(os.getenv("AUDIT_LOG_PATH", "logs/satark_audit_worm.log"))
+WORM_LOG_FILE = Path(os.getenv("AUDIT_LOG_PATH", "logs/ThirdEye_audit_worm.log"))
 
 # ── Event Types ───────────────────────────────────────────────────
 class EventType(str, Enum):
-    # ── Ported from Satark ──────────────────────────────────
+    # ── Ported from ThirdEye ──────────────────────────────────
     API_INGESTION           = "API_INGESTION"       # New blockchain data ingested
     EPOCH_ROTATION          = "EPOCH_ROTATION"       # ML model epoch / weight rotation
     THREAT_ALERT            = "THREAT_ALERT"         # High-severity threat raised
 
-    # ── Sentinel Galaxy extensions ──────────────────────────
+    # ── Third Eye extensions ──────────────────────────
     ANOMALY_DETECTED        = "ANOMALY_DETECTED"
     FORENSIC_REPORT         = "FORENSIC_REPORT"
     SHIELD_ACTIVATED        = "SHIELD_ACTIVATED"
@@ -59,14 +59,14 @@ class AuditEvent:
         ).hexdigest()
 
 
-# ── Core WORM Writer (Satark Port) ────────────────────────────────
+# ── Core WORM Writer (ThirdEye Port) ────────────────────────────────
 def write_worm_log(event_type: str, details: dict) -> dict:
     """
     Write-Once-Read-Many (WORM) compliant audit log entry.
-    Ported directly from Satark audit.py — all entries are append-only.
+    Ported directly from ThirdEye audit.py — all entries are append-only.
 
-    Valid Satark event_types: API_INGESTION, EPOCH_ROTATION, THREAT_ALERT
-    Sentinel Galaxy adds:     ANOMALY_DETECTED, SHIELD_ACTIVATED, PSI_MATCH, etc.
+    Valid ThirdEye event_types: API_INGESTION, EPOCH_ROTATION, THREAT_ALERT
+    Third Eye adds:     ANOMALY_DETECTED, SHIELD_ACTIVATED, PSI_MATCH, etc.
 
     Args:
         event_type: String event identifier (use EventType enum values)
@@ -94,9 +94,9 @@ def write_worm_log(event_type: str, details: dict) -> dict:
 # ── High-Level Audit Logger ───────────────────────────────────────
 class AuditLogger:
     """
-    Structured audit logger for Sentinel Galaxy detection events.
+    Structured audit logger for Third Eye detection events.
     Uses write_worm_log() internally for all persistence — guaranteeing
-    WORM compliance and backward compatibility with Satark's log format.
+    WORM compliance and backward compatibility with ThirdEye's log format.
     """
 
     def record(self, event: AuditEvent) -> AuditEvent:
@@ -117,21 +117,21 @@ class AuditLogger:
     # ── Convenience methods ───────────────────────────────────────
 
     def log_api_ingestion(self, source: str, record_count: int) -> dict:
-        """Satark compat: log a blockchain data ingestion event."""
+        """ThirdEye compat: log a blockchain data ingestion event."""
         return write_worm_log(EventType.API_INGESTION, {
             "source": source,
             "record_count": record_count,
         })
 
     def log_epoch_rotation(self, model_version: str, epoch: int) -> dict:
-        """Satark compat: log an ML model epoch rotation event."""
+        """ThirdEye compat: log an ML model epoch rotation event."""
         return write_worm_log(EventType.EPOCH_ROTATION, {
             "model_version": model_version,
             "epoch": epoch,
         })
 
     def log_threat_alert(self, wallet: str, risk_score: float, summary: str) -> dict:
-        """Satark compat: log a high-severity threat alert."""
+        """ThirdEye compat: log a high-severity threat alert."""
         return write_worm_log(EventType.THREAT_ALERT, {
             "wallet_address": wallet,
             "risk_score": risk_score,
@@ -145,7 +145,7 @@ class AuditLogger:
             risk_score=risk_score,
             details={"risk_hints": hints},
         )
-        # Also emit a THREAT_ALERT if high severity (Satark compat)
+        # Also emit a THREAT_ALERT if high severity (ThirdEye compat)
         if risk_score >= 0.75:
             self.log_threat_alert(wallet, risk_score, hints[0] if hints else "High risk detected")
         return self.record(event)

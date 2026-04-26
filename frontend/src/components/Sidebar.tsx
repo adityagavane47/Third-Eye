@@ -75,22 +75,37 @@ export default function Sidebar({ selectedNode, onClose }: SidebarProps) {
     setTxStatus("pending");
     setTxHash(null);
     try {
-      const res = await fetch(`${API_BASE}/api/graph/flag`, {
+      // Step 1: On-chain blacklist via backend OPERATOR_PRIVATE_KEY
+      const shieldRes = await fetch(`${API_BASE}/api/shield/blacklist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           wallet_address: selectedNode.address,
-          risk_score: selectedNode.riskScore,
+          risk_score:     selectedNode.riskScore,
+          reason:         `Third Eye manual shield — ${selectedNode.label} wallet flagged at ${(selectedNode.riskScore * 100).toFixed(1)}% risk`,
         }),
       });
-      if (!res.ok) throw new Error(`Shield failed: ${res.status}`);
-      const data = await res.json();
-      setTxHash(data?.tx_hash ?? null);
+      const data = await shieldRes.json();
+      if (!shieldRes.ok) throw new Error(data.detail ?? `HTTP ${shieldRes.status}`);
+
+      // Step 2: Also update Neo4j flagged state
+      await fetch(`${API_BASE}/api/graph/flag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet_address: selectedNode.address,
+          risk_score:     selectedNode.riskScore,
+        }),
+      });
+
+      setTxHash(data.tx_hash ?? null);
       setTxStatus("success");
     } catch (err: any) {
+      console.error("Shield failed:", err?.message);
       setTxStatus("error");
     }
   }, [selectedNode]);
+
 
   if (!selectedNode) {
     return (
@@ -213,12 +228,13 @@ export default function Sidebar({ selectedNode, onClose }: SidebarProps) {
           style={{
             ...styles.shieldBtn,
             opacity: txStatus === "pending" ? 0.6 : 1,
+            cursor: txStatus === "pending" ? "wait" : "pointer",
           }}
         >
-          {txStatus === "pending"   && "⏳ Sending…"}
-          {txStatus === "success"   && "✅ Shield Active"}
-          {txStatus === "error"     && "❌ Failed — Retry"}
-          {txStatus === "idle"      && "🛡 Activate Guardian Shield"}
+          {txStatus === "pending" && "⏳ Confirming on Base Sepolia…"}
+          {txStatus === "success" && "✅ Shield Active — Blacklisted On-Chain"}
+          {txStatus === "error"   && "❌ Failed — Check console & retry"}
+          {txStatus === "idle"    && "🛡 Activate Guardian Shield"}
         </button>
         {txHash && (
           <a
@@ -227,7 +243,7 @@ export default function Sidebar({ selectedNode, onClose }: SidebarProps) {
             rel="noopener noreferrer"
             style={styles.txLink}
           >
-            View on BaseScan ↗
+            View on BaseScan ↗ {txHash.slice(0, 10)}…{txHash.slice(-6)}
           </a>
         )}
       </div>

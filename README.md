@@ -1,4 +1,4 @@
-# 🛡️ Sentinel Galaxy — On-Chain Immunity System
+# 🛡️ Third Eye — On-Chain Immunity System
 
 > *"The blockchain doesn't lie. But attackers do. We watch both."*
 
@@ -11,7 +11,7 @@
 
 ## 🌌 Vision
 
-**Sentinel Galaxy** is a real-time, AI-powered **On-Chain Immunity System** built on Base Sepolia. It visualizes the entire blockchain transaction graph as an interactive 3D galaxy, detects anomalies using ML-driven engines, and autonomously shields vulnerable contracts via smart contract enforcement — all explained in plain English by a Gemini-powered forensic AI agent.
+**Third Eye** is a real-time, AI-powered **On-Chain Immunity System** built on Base Sepolia. It visualizes the entire blockchain transaction graph as an interactive 3D galaxy, detects anomalies using ML-driven engines, and autonomously shields vulnerable contracts via smart contract enforcement — all explained in plain English by a Gemini-powered forensic AI agent.
 
 Think of it as an **immune system for Web3**: constantly monitoring, learning from threats, and deploying antibodies (blacklists & shields) before exploits can propagate.
 
@@ -21,7 +21,7 @@ Think of it as an **immune system for Web3**: constantly monitoring, learning fr
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    SENTINEL GALAXY                          │
+│                    Third Eye                          │
 ├──────────────┬──────────────┬──────────────┬───────────────┤
 │  UI / Viz    │  Web3 Layer  │  AI Analyst  │  Data Layer   │
 │  (React+3D)  │  (Privy+Sol) │  (Gemini)    │  (Neo4j+Fast) │
@@ -46,7 +46,7 @@ Celery + Redis      ML/PSI Engines
 Gemini Agent ──────► Forensic Report (Sidebar)
       │
       ▼
-SatarkGuardian.sol ──► On-Chain Shield/Blacklist
+ThirdEyeGuardian.sol ──► On-Chain Shield/Blacklist
 ```
 
 ---
@@ -54,7 +54,7 @@ SatarkGuardian.sol ──► On-Chain Shield/Blacklist
 ## 📁 Directory Structure
 
 ```
-sentinel-galaxy/
+Third Eye-galaxy/
 ├── .env.example
 ├── .gitignore
 ├── README.md
@@ -67,14 +67,13 @@ sentinel-galaxy/
 │   ├── agent/
 │   │   └── forensic_agent.py      # Gemini-powered forensic analysis
 │   └── core/
-│       ├── ml_engine.py           # ML anomaly detection (Satark legacy)
+│       ├── ml_engine.py           # ML anomaly detection (ThirdEye legacy)
 │       ├── psi_engine.py          # Pattern-Signature Intelligence
 │       └── audit.py               # On-chain audit trail logger
 │
 ├── contracts/
-│   ├── SatarkGuardian.sol         # Shield + Blacklist contract
-│   └── hardhat.config.ts          # Hardhat / Base Sepolia config
-│
+│   ├── ThirdEyeGuardian.sol       # Shield + Blacklist contract
+│   ├── package.json               # Solidity dependencies (OpenZeppelin)
 ├── frontend/
 │   ├── index.html
 │   ├── vite.config.ts
@@ -102,8 +101,8 @@ sentinel-galaxy/
 
 ### 1. Clone & Environment Setup
 ```bash
-git clone https://github.com/your-org/sentinel-galaxy.git
-cd sentinel-galaxy
+git clone https://github.com/your-org/Third Eye-galaxy.git
+cd Third Eye-galaxy
 cp .env.example .env
 
 ```
@@ -135,8 +134,8 @@ npm run dev
 
 ### 6. Deploy Contract (Base Sepolia)
 ```bash
-cd contracts
-npx hardhat run scripts/deploy.ts --network base-sepolia
+cd backend
+python deploy_contract.py
 ```
 
 ---
@@ -148,7 +147,7 @@ npx hardhat run scripts/deploy.ts --network base-sepolia
 | Root & Infrastructure | Blueprint Lead | `.gitignore`, `.env.example`, `README.md`, `docker-compose.yml` |
 | Backend Architect | Member 3 | `backend/main.py`, `backend/database.py`, `backend/core/`, `scripts/` |
 | AI Analyst | Member 1 | `backend/agent/forensic_agent.py`, `backend/tasks.py` |
-| Web3 Enforcer | Member 2 | `contracts/SatarkGuardian.sol`, `frontend/src/hooks/useShield.ts` |
+| Web3 Enforcer | Member 2 | `contracts/ThirdEyeGuardian.sol`, `frontend/src/hooks/useShield.ts` |
 | UI/Viz Designer | Member 4 | `frontend/src/components/`, `frontend/src/pages/Dashboard.tsx` |
 
 ---
@@ -156,7 +155,7 @@ npx hardhat run scripts/deploy.ts --network base-sepolia
 ## 🔐 Security Model
 
 - **HMAC Validation**: All internal service-to-service calls validated via HMAC-SHA256
-- **On-Chain Blacklist**: Malicious addresses flagged on-chain via `SatarkGuardian.sol`
+- **On-Chain Blacklist**: Malicious addresses flagged on-chain via `ThirdEyeGuardian.sol`
 - **Privy Auth**: Gasless, email/social Web3 onboarding — no seed phrase exposure
 - **Environment Isolation**: Zero secrets in source; all via `.env`
 
@@ -164,4 +163,4 @@ npx hardhat run scripts/deploy.ts --network base-sepolia
 
 ## 📜 License
 
-MIT © 2026 Sentinel Galaxy Team
+MIT © 2026 Third Eye Team

@@ -1,6 +1,6 @@
 """
-backend/test.py — Sentinel Galaxy Test Suite
-Ported & expanded from Satark test.py
+backend/test.py — Third Eye Test Suite
+Ported & expanded from ThirdEye test.py
 
 Categories:
   - Unit Tests:        HMAC, SCC graph, ML engine, PSI engine
@@ -30,10 +30,10 @@ import pytest
 # ── Path setup so imports resolve from backend/ ───────────────────
 sys.path.insert(0, str(Path(__file__).parent))
 
-# ── Sentinel Galaxy imports ───────────────────────────────────────
+# ── Third Eye imports ───────────────────────────────────────
 from core.ml_engine import (
     FEATURE_NAMES,
-    SATARK_MLEngine,
+    ThirdEye_MLEngine,
     MLEngine,
     RiskScore,
     composite_risk_score,
@@ -41,18 +41,18 @@ from core.ml_engine import (
 from core.psi_engine import (
     ExploitCategory,
     PSIEngine,
-    SatarkPSI,
+    ThirdEyePSI,
     SignatureMatch,
 )
 from core.audit import AuditLogger, EventType, write_worm_log, WORM_LOG_FILE
 
-# ── Test Constants (ported from Satark) ───────────────────────────
-SECRET_KEY = b"SATARK_ENTERPRISE_SECRET_KEY_2026"
+# ── Test Constants (ported from ThirdEye) ───────────────────────────
+SECRET_KEY = b"ThirdEye_ENTERPRISE_SECRET_KEY_2026"
 EPOCH_KEY = os.urandom(32)
 
 
 def make_token(account: str, key: bytes) -> str:
-    """HMAC-SHA256 token generator — ported directly from Satark test.py."""
+    """HMAC-SHA256 token generator — ported directly from ThirdEye test.py."""
     return hmac.new(key, str(account).encode(), hashlib.sha256).hexdigest()
 
 
@@ -61,10 +61,10 @@ def make_token(account: str, key: bytes) -> str:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestHMAC:
-    """Ported from Satark: HMAC security and determinism checks."""
+    """Ported from ThirdEye: HMAC security and determinism checks."""
 
     def test_hmac_determinism(self):
-        """Same input + key must always produce identical token (Satark port)."""
+        """Same input + key must always produce identical token (ThirdEye port)."""
         acc = "0xDeadBeef1234567890abcdef1234567890abcdef"
         t1 = make_token(acc, EPOCH_KEY)
         t2 = make_token(acc, EPOCH_KEY)
@@ -72,7 +72,7 @@ class TestHMAC:
         assert len(t1) == 64, "SHA-256 hex digest must be 64 chars"
 
     def test_plain_sha256_rejected(self):
-        """Plain SHA-256 (no HMAC) must never equal HMAC output (Satark port)."""
+        """Plain SHA-256 (no HMAC) must never equal HMAC output (ThirdEye port)."""
         acc = "0xTestWallet"
         insecure = hashlib.sha256(str(acc).encode()).hexdigest()
         secure = make_token(acc, EPOCH_KEY)
@@ -85,8 +85,8 @@ class TestHMAC:
         key_b = os.urandom(32)
         assert make_token(acc, key_a) != make_token(acc, key_b)
 
-    def test_sentinel_hmac_signature_format(self):
-        """Sentinel Galaxy's HMAC middleware signature format is correctly parseable."""
+    def test_Third Eye_hmac_signature_format(self):
+        """Third Eye's HMAC middleware signature format is correctly parseable."""
         timestamp = int(time.time())
         method, path, body = "POST", "/internal/analyze", b'{"wallet":"0x1234"}'
         payload = f"{method}:{path}:{timestamp}:{body.hex()}"
@@ -101,10 +101,10 @@ class TestHMAC:
 
 
 class TestGraphAlgorithms:
-    """Ported from Satark: graph-based anomaly detection primitives."""
+    """Ported from ThirdEye: graph-based anomaly detection primitives."""
 
     def test_tarjan_scc_6node_ring(self):
-        """6-node directed ring → 1 SCC of size 6, under 10ms (Satark port)."""
+        """6-node directed ring → 1 SCC of size 6, under 10ms (ThirdEye port)."""
         G = nx.DiGraph()
         G.add_edges_from([(1,2),(2,3),(3,4),(4,5),(5,6),(6,1)])
 
@@ -133,18 +133,18 @@ class TestGraphAlgorithms:
 
 
 class TestMLEngine:
-    """Sentinel Galaxy: ML Engine unit tests."""
+    """Third Eye: ML Engine unit tests."""
 
-    def test_satark_ml_engine_untrained_returns_defaults(self):
+    def test_ThirdEye_ml_engine_untrained_returns_defaults(self):
         """Untrained engine must return 0.5 default scores without crashing."""
-        engine = SATARK_MLEngine()
+        engine = ThirdEye_MLEngine()
         engine.is_trained = False  # Force untrained state
         scores = engine.score_samples([[0.1] * len(FEATURE_NAMES)])
         assert scores == [0.5]
 
-    def test_satark_ml_engine_train_and_score(self):
+    def test_ThirdEye_ml_engine_train_and_score(self):
         """Train on 50 synthetic samples and verify scores are in [0, 1]."""
-        engine = SATARK_MLEngine(contamination=0.1)
+        engine = ThirdEye_MLEngine(contamination=0.1)
         np.random.seed(42)
         features = np.random.rand(50, len(FEATURE_NAMES)).tolist()
         engine.train(features)
@@ -156,7 +156,7 @@ class TestMLEngine:
 
     def test_explain_anomaly_returns_top3(self):
         """explain_anomaly must return exactly 3 feature contributions."""
-        engine = SATARK_MLEngine()
+        engine = ThirdEye_MLEngine()
         feature_values = [0.8, 1.5, 3.0, 1.0, 2.0, 0.3, 0.0, 0.0, 0.0, 0.5]
         contributions = engine.explain_anomaly(feature_values)
         assert len(contributions) == 3
@@ -165,7 +165,8 @@ class TestMLEngine:
         vals = [c["shap_value"] for c in contributions]
         assert vals == sorted(vals, reverse=True)
 
-    def test_ml_engine_riskscore_dataclass(self):
+    @pytest.mark.asyncio
+    async def test_ml_engine_riskscore_dataclass(self):
         """MLEngine.score() must return a valid RiskScore with all fields."""
         engine = MLEngine()
         tx_history = [
@@ -174,7 +175,7 @@ class TestMLEngine:
             {"to": "0xContract1", "value_eth": 5.0, "gas_used": 500_000},
             {"to": "0xContract2", "value_eth": 1.0, "gas_used": 21_000},
         ]
-        result = engine.score("0xTestWallet", tx_history)
+        result = await engine.score("0xTestWallet", tx_history)
 
         assert isinstance(result, RiskScore)
         assert result.wallet_address == "0xTestWallet"
@@ -182,7 +183,8 @@ class TestMLEngine:
         assert isinstance(result.risk_hints, list)
         assert len(result.risk_hints) > 0
 
-    def test_flash_loan_hint_detected(self):
+    @pytest.mark.asyncio
+    async def test_flash_loan_hint_detected(self):
         """Flash loan pattern (high gas + tx burst) must appear in risk_hints."""
         engine = MLEngine()
         # 5 txs to same contract with very high gas = flash loan signal
@@ -190,25 +192,25 @@ class TestMLEngine:
             {"to": "0xFlashPool", "value_eth": 100.0, "gas_used": 600_000}
             for _ in range(5)
         ]
-        result = engine.score("0xExploit", tx_history)
+        result = await engine.score("0xExploit", tx_history)
         hints_combined = " ".join(result.risk_hints).lower()
         assert "flash" in hints_combined, f"Expected flash loan hint, got: {result.risk_hints}"
 
 
 class TestPSIEngine:
-    """Sentinel Galaxy: PSI Engine unit tests."""
+    """Third Eye: PSI Engine unit tests."""
 
-    def test_satark_psi_encrypt_determinism(self):
+    def test_ThirdEye_psi_encrypt_determinism(self):
         """Same tokens with same salt must always encrypt to the same ciphertexts."""
-        psi = SatarkPSI()
+        psi = ThirdEyePSI()
         tokens = ["0xWallet1", "0xWallet2", "0xWallet3"]
         enc1 = psi.encrypt_set(tokens)
         enc2 = psi.encrypt_set(tokens)
         assert enc1 == enc2
 
-    def test_satark_psi_intersect(self):
+    def test_ThirdEye_psi_intersect(self):
         """PSI intersection must correctly find common ciphertexts."""
-        psi = SatarkPSI()
+        psi = ThirdEyePSI()
         a = psi.encrypt_set(["0xAlice", "0xBob", "0xMalice"])
         b = psi.encrypt_set(["0xMalice", "0xCharlie"])
         common = psi.intersect(a, b)
@@ -218,8 +220,8 @@ class TestPSIEngine:
         assert malice_cipher in common
 
     def test_psi_blacklist_check(self):
-        """SatarkPSI.check_addresses() must return addresses in the blacklist."""
-        psi = SatarkPSI()
+        """ThirdEyePSI.check_addresses() must return addresses in the blacklist."""
+        psi = ThirdEyePSI()
         bad_addresses = ["0xBadActor1", "0xBadActor2"]
         psi.load_blacklist(bad_addresses)
 
@@ -253,7 +255,7 @@ class TestPSIEngine:
 class TestIntegration:
 
     def test_composite_risk_score_alert_threshold(self):
-        """High-risk inputs must produce composite score > 0.75 (Satark port)."""
+        """High-risk inputs must produce composite score > 0.75 (ThirdEye port)."""
         score = composite_risk_score(
             if_score=0.9,
             cycle_score=1.0,
@@ -280,7 +282,7 @@ class TestIntegration:
             assert 0.0 <= score <= 1.0, f"Score out of bounds: {score}"
 
     def test_key_rotation_produces_different_tokens(self):
-        """Rotating EPOCH_KEY must invalidate old tokens (Satark port)."""
+        """Rotating EPOCH_KEY must invalidate old tokens (ThirdEye port)."""
         old_key = os.urandom(32)
         new_key = os.urandom(32)
         acc = "0xMuleWallet"
@@ -337,7 +339,7 @@ class TestIntegration:
 class TestAdversarial:
 
     def test_replay_attack_timestamp_window(self):
-        """HMAC middleware must reject signatures older than 300s (Satark port)."""
+        """HMAC middleware must reject signatures older than 300s (ThirdEye port)."""
         REPLAY_WINDOW_S = 300
         old_timestamp = int(time.time()) - 400  # 400s ago — outside window
         fresh_timestamp = int(time.time()) - 10  # 10s ago — within window
@@ -360,7 +362,7 @@ class TestAdversarial:
         assert sig in seen_signatures, "Second use must be detected as replay"
 
     def test_smurfing_accumulation(self):
-        """Multiple micro-transactions must accumulate over threshold (Satark port)."""
+        """Multiple micro-transactions must accumulate over threshold (ThirdEye port)."""
         micro_txs = [5_000, 5_000, 5_000]   # 3 x 5k INR micro-transactions
         threshold = 12_000
         assert sum(micro_txs) > threshold, "Smurfing accumulation must exceed threshold"
@@ -385,7 +387,7 @@ class TestAdversarial:
 
     def test_psi_privacy_no_plaintext_leakage(self):
         """PSI must never expose plaintext addresses in ciphertext output."""
-        psi = SatarkPSI()
+        psi = ThirdEyePSI()
         addresses = ["0xVictimWallet", "0xAnotherWallet"]
         ciphertexts = psi.encrypt_set(addresses)
         for addr in addresses:
@@ -401,7 +403,7 @@ class TestAdversarial:
 class TestRedTeam:
 
     def test_no_pii_in_audit_record(self):
-        """Audit records must not contain raw plaintext PII (Satark port)."""
+        """Audit records must not contain raw plaintext PII (ThirdEye port)."""
         db_record = {
             "wallet_address": "0x5f3a...hashed",
             "raw_private_key": None,
@@ -411,7 +413,7 @@ class TestRedTeam:
         assert db_record["seed_phrase"] is None
 
     def test_tls_required_in_production(self):
-        """Production API config must enforce HTTPS/TLS (Satark port)."""
+        """Production API config must enforce HTTPS/TLS (ThirdEye port)."""
         app_env = os.getenv("APP_ENV", "development")
         if app_env == "production":
             tls_required = True
@@ -429,7 +431,7 @@ class TestRedTeam:
         for path in source_files:
             if not path.exists():
                 continue
-            content = path.read_text()
+            content = path.read_text(encoding="utf-8")
             for pattern in forbidden_patterns:
                 assert pattern not in content, \
                     f"Secret pattern '{pattern}' found hardcoded in {path.name}"
@@ -450,7 +452,7 @@ class TestRedTeam:
 class TestPerformance:
 
     def test_throughput_p99_under_100ms(self):
-        """1,000 mock latency samples must have p99 < 100ms (Satark port)."""
+        """1,000 mock latency samples must have p99 < 100ms (ThirdEye port)."""
         random.seed(42)
         latency_samples = [random.uniform(10, 50) for _ in range(1000)]
         p99 = sorted(latency_samples)[989]
@@ -458,7 +460,7 @@ class TestPerformance:
 
     def test_psi_encrypt_1000_wallets_under_500ms(self):
         """PSI encryption of 1,000 wallet addresses must complete under 500ms."""
-        psi = SatarkPSI()
+        psi = ThirdEyePSI()
         addresses = [f"0x{i:040x}" for i in range(1000)]
 
         start = time.perf_counter()
@@ -470,7 +472,7 @@ class TestPerformance:
 
     def test_ml_scoring_100_wallets_under_1s(self):
         """Scoring 100 wallets with trained IsolationForest must complete under 1 second."""
-        engine = SATARK_MLEngine()
+        engine = ThirdEye_MLEngine()
         np.random.seed(0)
         train_data = np.random.rand(200, len(FEATURE_NAMES)).tolist()
         engine.train(train_data)

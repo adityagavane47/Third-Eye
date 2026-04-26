@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/seed_galaxy.py — Sentinel Galaxy Neo4j Seeder (v2)
+scripts/seed_galaxy.py — Third Eye Neo4j Seeder (v2)
 =========================================================
 Generates 5,000 synthetic Web3 wallet nodes and their transaction
 relationships and pushes them to Neo4j using the async driver.
@@ -273,7 +273,7 @@ def print_summary_report(wallets: list[dict], relationships: list[dict], elapsed
     avg_edges = len(relationships) / len(wallets)
 
     print("\n" + "=" * 60)
-    print("  SENTINEL GALAXY -- SEED REPORT")
+    print("  Third Eye -- SEED REPORT")
     print("=" * 60)
     print(f"  Total nodes:          {len(wallets):>8,}")
     print(f"  Total relationships:  {len(relationships):>8,}")
@@ -330,7 +330,7 @@ async def seed(reset: bool = False, total_nodes: int = TOTAL_NODES) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Sentinel Galaxy — Neo4j Database Seeder",
+        description="Third Eye — Neo4j Database Seeder",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
