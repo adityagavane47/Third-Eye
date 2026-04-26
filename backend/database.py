@@ -41,7 +41,10 @@ def get_driver() -> AsyncDriver:
             NEO4J_URI,
             auth=NEO4J_AUTH,
             max_connection_pool_size=50,
-            connection_timeout=10.0,
+            connection_timeout=30.0,
+            max_connection_lifetime=60.0,  # Proactively recycle connections every minute
+            connection_acquisition_timeout=30.0,
+            keep_alive=True,
         )
     return _driver
 

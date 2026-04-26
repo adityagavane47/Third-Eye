@@ -1,6 +1,5 @@
 /**
- * frontend/src/pages/Dashboard.tsx — Main Layout
- * Role: UI/Viz Designer (Member 4)
+ * Dashboard.tsx — Main Layout
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -9,8 +8,7 @@ import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
 import { useShield } from "../hooks/useShield";
 
-// Use relative paths so Vite's proxy (/api → localhost:8000) handles routing.
-// This eliminates CORS errors entirely in development.
+// Relative paths handled by Vite proxy
 const API_BASE = "";
 
 
@@ -19,7 +17,7 @@ const EMPTY_GRAPH: GraphData = { nodes: [], links: [] };
 export default function Dashboard() {
   const { authenticated, walletAddress, login, logout } = useAuth();
 
-  // On-chain shield hook — connects to ThirdEyeGuardian.sol on Base Sepolia
+
   const {
     blacklistWallet,
     txStatus,
@@ -42,7 +40,7 @@ export default function Dashboard() {
     setTimeout(() => setToast(null), 4500);
   };
 
-  // Fetch graph data from backend
+
   const fetchGraph = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/graph/nodes?limit=200`);
@@ -52,7 +50,7 @@ export default function Dashboard() {
       setAlertMode(data.nodes?.some((n: GalaxyNode) => n.flagged) ?? false);
       setLastRefresh(new Date());
     } catch {
-      // In dev, use mock data so UI is still renderable
+
       setGraphData(MOCK_GRAPH_DATA);
       setAlertMode(MOCK_GRAPH_DATA.nodes.some((n) => n.flagged));
     } finally {
@@ -71,12 +69,12 @@ export default function Dashboard() {
     setSidebarOpen(true);
   };
 
-  // Also open sidebar via a standalone button (fallback for when node click is hard to hit)
+
   const handleOpenPanel = () => {
     if (selectedNode) {
       setSidebarOpen(true);
     } else if (graphData.nodes.length > 0) {
-      // Auto-select the highest-risk node
+
       const riskiest = [...graphData.nodes].sort((a, b) => b.riskScore - a.riskScore)[0];
       setSelectedNode(riskiest);
       setSidebarOpen(true);
@@ -89,7 +87,7 @@ export default function Dashboard() {
   };
 
   const simulateExploit = async () => {
-    // Guard: wallet must be connected to sign the on-chain blacklist tx
+
     if (!authenticated) {
       showToast("Connect your wallet first to activate the on-chain shield.", "error");
       login();
@@ -115,7 +113,7 @@ export default function Dashboard() {
     setAlertMode(true);
 
     try {
-      // Step 1: Inject attacker into Neo4j via ML pipeline
+      // Inject attacker
       const res = await fetch("/api/simulate-exploit", { method: "POST" });
       if (!res.ok) throw new Error(`Backend HTTP ${res.status}`);
       const data = await res.json();
@@ -135,7 +133,7 @@ export default function Dashboard() {
       };
       setSelectedNode(attackerNode);
 
-      // Step 2: Backend-signed blacklist on Base Sepolia (via OPERATOR_PRIVATE_KEY)
+      // Shield blacklist on Base Sepolia
       showToast("⏳ Confirming on Base Sepolia…", "info");
       const shieldRes = await fetch("/api/shield/blacklist", {
         method: "POST",
@@ -148,7 +146,7 @@ export default function Dashboard() {
       });
       const shieldData = await shieldRes.json();
 
-      // Step 3: Handle on-chain result
+      // Handle on-chain result
       if (shieldRes.ok && shieldData.tx_hash) {
         const h = shieldData.tx_hash as string;
         showToast(
@@ -167,7 +165,7 @@ export default function Dashboard() {
         );
       }
 
-      // Refresh graph regardless of tx outcome
+
       fetchGraph();
 
     } catch (err: any) {
@@ -316,7 +314,7 @@ export default function Dashboard() {
   );
 }
 
-// ── Inline Styles ──────────────────────────────────────────────
+
 const styles: Record<string, React.CSSProperties> = {
   root: {
     width: "100vw",

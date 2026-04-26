@@ -1,18 +1,12 @@
 /**
- * frontend/src/components/Galaxy3D.tsx — 3D Force Graph Visualization
- * Role: UI/Viz Designer (Member 4)
- *
- * Renders the blockchain transaction graph as an interactive 3D galaxy
- * using react-force-graph-3d. Node color encodes risk level.
- * Clicking a node triggers forensic analysis via the Sidebar.
+ * Galaxy3D.tsx — 3D Force Graph Visualization
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";
 
-// We will store references to attacker nodes here to animate them directly
-// outside of the React render cycle for smooth 60fps pulsing.
+// Store references to attacker meshes for 60fps pulsing animation
 const _attackerMeshes = new Set<{ core: THREE.Mesh; halo: THREE.Mesh }>();
 
 let animationFrameId: number;
@@ -114,12 +108,12 @@ export default function Galaxy3D({
     return () => observer.disconnect();
   }, []);
 
-  // Clear stale attacker meshes when graph updates so we don't animate deleted objects
+  // Clear stale attacker meshes
   useEffect(() => {
     _attackerMeshes.clear();
   }, [graphData]);
 
-  // Start/stop the animation loop when the component mounts/unmounts
+  // Animation loop
   useEffect(() => {
     startPulsing();
     return () => cancelAnimationFrame(animationFrameId);
@@ -137,8 +131,7 @@ export default function Galaxy3D({
   }, [selectedNode]);
 
 
-  // Rotating camera animation removed — was causing 30fps re-renders constantly
-  // Users can orbit manually with mouse drag
+
 
   const nodeThreeObject = useCallback(
     (node: GalaxyNode) => {

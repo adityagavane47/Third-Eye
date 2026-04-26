@@ -1,20 +1,7 @@
 #!/usr/bin/env python3
 """
-scripts/seed_galaxy.py — Third Eye Neo4j Seeder (v2)
-=========================================================
-Generates 5,000 synthetic Web3 wallet nodes and their transaction
-relationships and pushes them to Neo4j using the async driver.
-
-Distribution model:
-  - 95% of wallets are "safe" (low risk_score via Beta(0.5, 8))
-  - 5%  are "attackers" (high risk_score via Beta(8, 0.5))
-
-Attacker nodes receive 3–5× more outgoing edges to simulate
-laundering and exploit propagation.
-
-Usage:
-    python scripts/seed_galaxy.py [--nodes 5000] [--reset]
-    python scripts/seed_galaxy.py --reset   # wipes existing data first
+scripts/seed_galaxy.py — Third Eye Neo4j Seeder
+Generates synthetic Web3 wallet nodes and relationships.
 """
 
 import argparse
@@ -27,14 +14,14 @@ import time
 from collections import Counter
 from pathlib import Path
 
-# ── Path setup ────────────────────────────────────────────────────
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-# ── Logging ───────────────────────────────────────────────────────
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -42,9 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger("seed_galaxy")
 
 
-# ═════════════════════════════════════════════════════════════════
-# CONSTANTS
-# ═════════════════════════════════════════════════════════════════
+
 
 TOTAL_NODES       = 5_000
 BATCH_SIZE        = 250        # Records per Neo4j UNWIND batch
@@ -53,13 +38,13 @@ WHALE_RATIO       = 0.05       # 5% are whales (high balance, low risk)
 BOT_RATIO         = 0.08       # 8% are bots
 EXCHANGE_RATIO    = 0.10       # 10% are exchanges
 
-# Relationship density: (min, max) edges per node type
+# Relationship density bounds per node type
 DENSITY = {
-    "attacker":  (8, 15),   # Very high connectivity — exploit propagation
-    "bot":       (5, 10),   # High — automated interactions
-    "whale":     (3, 6),    # Medium — large transfers
-    "exchange":  (4, 8),    # Medium-high — routing hub
-    "defi_user": (1, 4),    # Normal user activity
+    "attacker":  (8, 15),
+    "bot":       (5, 10),
+    "whale":     (3, 6),
+    "exchange":  (4, 8),
+    "defi_user": (1, 4),
     "unknown":   (1, 3),
 }
 
@@ -67,9 +52,7 @@ HEX_CHARS = "0123456789abcdef"
 RISK_THRESHOLD = 0.75   # Wallets above this are auto-flagged
 
 
-# ═════════════════════════════════════════════════════════════════
-# HELPER FUNCTIONS
-# ═════════════════════════════════════════════════════════════════
+
 
 def random_address() -> str:
     """Generate a realistic-looking 42-char Ethereum wallet address."""
@@ -82,15 +65,6 @@ def random_tx_hash() -> str:
 
 
 def beta_risk_score(is_attacker: bool) -> float:
-    """
-    Sample a risk score using a Beta distribution.
-
-    Safe wallets:    Beta(0.5, 8)  → concentrated near 0.0
-    Attackers:       Beta(8, 0.5)  → concentrated near 1.0
-
-    This ensures the 95/5 split while still being a smooth distribution
-    rather than a hard threshold.
-    """
     if is_attacker:
         return round(min(random.betavariate(8.0, 0.5), 1.0), 4)
     else:
@@ -115,9 +89,7 @@ def assign_label(is_attacker: bool, risk_score: float, rng: float) -> str:
     return "defi_user"
 
 
-# ═════════════════════════════════════════════════════════════════
-# DATA GENERATION
-# ═════════════════════════════════════════════════════════════════
+
 
 def generate_wallets(count: int) -> list[dict]:
     """
@@ -166,12 +138,6 @@ def generate_wallets(count: int) -> list[dict]:
 
 
 def generate_relationships(wallets: list[dict]) -> list[dict]:
-    """
-    Generate SENT_TO edges.
-
-    Attacker nodes get 8–15 edges; regular users get 1–4.
-    This simulates exploit propagation through the network.
-    """
     logger.info("Generating transaction relationships…")
     relationships = []
     addresses = [w["address"] for w in wallets]
@@ -205,9 +171,9 @@ def generate_relationships(wallets: list[dict]) -> list[dict]:
     return relationships
 
 
-# ═════════════════════════════════════════════════════════════════
+
 # NEO4J SEEDING
-# ═════════════════════════════════════════════════════════════════
+
 
 async def seed_nodes(driver, wallets: list[dict]) -> None:
     """Batch-insert wallet nodes using UNWIND + MERGE (idempotent)."""
@@ -259,9 +225,7 @@ async def seed_relationships(driver, relationships: list[dict]) -> None:
             logger.info("  Relationships seeded: %d / %d", done, len(relationships))
 
 
-# ═════════════════════════════════════════════════════════════════
-# SUMMARY REPORT
-# ═════════════════════════════════════════════════════════════════
+
 
 def print_summary_report(wallets: list[dict], relationships: list[dict], elapsed: float) -> None:
     """
@@ -290,9 +254,7 @@ def print_summary_report(wallets: list[dict], relationships: list[dict], elapsed
     print("=" * 60 + "\n")
 
 
-# ═════════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ═════════════════════════════════════════════════════════════════
+
 
 async def seed(reset: bool = False, total_nodes: int = TOTAL_NODES) -> None:
     """Main seeding coroutine."""

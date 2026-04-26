@@ -36,11 +36,11 @@ const HAS_PRIVY = !!PRIVY_APP_ID && PRIVY_APP_ID !== "your_privy_app_id_here";
 // ── App ───────────────────────────────────────────────────────
 export default function App() {
   if (!HAS_PRIVY) {
-    // Dev mode: no Privy App ID configured — render dashboard directly.
-    // Auth buttons will show "Connect Wallet" with no-op handlers.
-    console.info("[Third Eye] VITE_PRIVY_APP_ID not set — running in dev mode without auth.");
+    console.info("[Third Eye] VITE_PRIVY_APP_ID not set — running in dev mode without auth.", { PRIVY_APP_ID });
     return <Dashboard />;
   }
+
+  console.info("[Third Eye] Privy configured with ID:", PRIVY_APP_ID);
 
   // Production / staging: PrivyProvider is imported at top level
 

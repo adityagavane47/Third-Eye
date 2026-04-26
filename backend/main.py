@@ -1,12 +1,5 @@
 """
 backend/main.py — Third Eye FastAPI Entry Point
-Role: Backend Architect (Member 3)
-
-Responsibilities:
-- CORS configuration for frontend
-- HMAC-SHA256 middleware for internal service authentication
-- Route registration for graph, anomaly, and forensic endpoints
-- Health check endpoint
 """
 
 import hashlib
@@ -37,12 +30,19 @@ CORS_ORIGINS = os.getenv("API_CORS_ORIGINS", "http://localhost:5173").split(",")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize connections on startup; clean up on shutdown."""
     from database import get_driver
     logger.info("🛡️  Third Eye API starting up…")
     app.state.neo4j = get_driver()
     
-    # Clean up previous demo exploits on startup for a fresh "peace" state
+    # Verify connectivity on startup
+    try:
+        await app.state.neo4j.verify_connectivity()
+        logger.info("✅ Neo4j connection verified")
+    except Exception as e:
+        logger.error(f"❌ Failed to verify Neo4j connection: {e}")
+    
+    # Clean up previous demo exploits
+
     async with app.state.neo4j.session() as session:
         await session.run("MATCH (w:Wallet {injected: true}) DETACH DELETE w")
         
@@ -141,10 +141,7 @@ async def health_check():
 
 @app.get("/api/graph/nodes", tags=["Graph"])
 async def get_graph_nodes(limit: int = 200, request: Request = None):
-    """
-    Fetch wallet nodes and their SENT_TO relationships from Neo4j.
-    Returns data formatted for react-force-graph-3d.
-    """
+    """Fetch wallet nodes and relationships for 3D graph."""
     driver = request.app.state.neo4j
     async with driver.session() as session:
         nodes_result = await session.run(
@@ -300,7 +297,8 @@ async def simulate_exploit(request: Request = None):
 
     driver = request.app.state.neo4j
     async with driver.session() as session:
-        # Clear previous injected attackers to keep the demo clean
+        # Clear previous injected attackers
+
         await session.run("MATCH (w:Wallet {injected: true}) DETACH DELETE w")
 
         await session.run(

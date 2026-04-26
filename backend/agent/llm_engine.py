@@ -1,8 +1,6 @@
 """
 backend/agent/llm_engine.py — Groq-Powered Forensic Report Engine
-==================================================================
-Uses llama3-8b-8192 via the Groq API for sub-500ms AI forensic reports.
-Falls back to a deterministic local report if Groq is unavailable.
+Uses llama3-8b-8192 via Groq API, with local fallback.
 """
 
 import logging
@@ -19,7 +17,7 @@ logger = logging.getLogger("Third Eye.llm_engine")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL   = "llama-3.1-8b-instant"
 
-# Risk signal library — injected into the prompt for richer context
+
 RISK_SIGNALS = {
     "high_velocity":    "High-velocity fund dispersion (>50 TXs in 24h)",
     "cycle_detected":   "Circular transaction cycle detected (A→B→C→A pattern)",
@@ -38,13 +36,7 @@ async def generate_forensic_report(
     label: str,
     risk_hints: list[str] | None = None,
 ) -> dict:
-    """
-    Generate a structured forensic report for a wallet.
-
-    Returns a dict with:
-      risk_level, executive_summary, threat_narrative,
-      recommended_actions, exploit_categories
-    """
+    """Generate a structured forensic report for a wallet."""
     if risk_hints is None:
         # Auto-select signals based on risk score
         k = max(1, int(risk_score * len(RISK_SIGNALS)))
@@ -57,7 +49,7 @@ async def generate_forensic_report(
         else "LOW"
     )
 
-    # ── Try Groq first ─────────────────────────────────────────
+    
     if GROQ_API_KEY:
         try:
             from groq import AsyncGroq  # noqa: PLC0415
@@ -116,7 +108,7 @@ Respond ONLY with valid JSON, no markdown code fences."""
         except Exception as exc:
             logger.warning("Groq call failed (%s) — using local fallback", exc)
 
-    # ── Deterministic fallback (no API key or Groq error) ──────
+
     return _local_fallback(wallet_address, risk_score, risk_level, label, risk_hints)
 
 
