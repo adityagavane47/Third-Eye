@@ -20,9 +20,9 @@ export interface AuthState {
   /** Full wallet address (0x...) */
   fullAddress: string | null;
   /** Trigger the Privy login modal */
-  login: () => Promise<void>;
+  login: () => void;
   /** Sign the user out */
-  logout: () => Promise<void>;
+  logout: () => void;
 }
 
 // ── Default (dev mode / no Privy) context ────────────────────
@@ -30,8 +30,8 @@ const AuthContext = createContext<AuthState>({
   authenticated: false,
   walletAddress: null,
   fullAddress: null,
-  login: async () => {},
-  logout: async () => {},
+  login: () => {},
+  logout: () => {},
 });
 
 // ── Hook ──────────────────────────────────────────────────────

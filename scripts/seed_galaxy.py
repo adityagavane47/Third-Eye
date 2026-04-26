@@ -48,7 +48,7 @@ logger = logging.getLogger("seed_galaxy")
 
 TOTAL_NODES       = 5_000
 BATCH_SIZE        = 250        # Records per Neo4j UNWIND batch
-ATTACKER_RATIO    = 0.05       # 5% are attackers (high-risk)
+ATTACKER_RATIO    = 0.0        # 0% are attackers initially (starts in peace state)
 WHALE_RATIO       = 0.05       # 5% are whales (high balance, low risk)
 BOT_RATIO         = 0.08       # 8% are bots
 EXCHANGE_RATIO    = 0.10       # 10% are exchanges

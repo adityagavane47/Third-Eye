@@ -41,6 +41,11 @@ async def lifespan(app: FastAPI):
     from database import get_driver
     logger.info("🛡️  Third Eye API starting up…")
     app.state.neo4j = get_driver()
+    
+    # Clean up previous demo exploits on startup for a fresh "peace" state
+    async with app.state.neo4j.session() as session:
+        await session.run("MATCH (w:Wallet {injected: true}) DETACH DELETE w")
+        
     yield
     logger.info("🔴  Third Eye API shutting down…")
     await app.state.neo4j.close()
@@ -145,14 +150,22 @@ async def get_graph_nodes(limit: int = 200, request: Request = None):
         nodes_result = await session.run(
             """
             MATCH (w:Wallet)
-            RETURN
-                w.address    AS address,
-                w.label      AS label,
-                w.risk_score AS riskScore,
-                w.flagged    AS flagged,
-                w.tx_count   AS txCount,
-                w.balance_eth AS balanceEth
+            WITH w
+            ORDER BY w.risk_score DESC
+            LIMIT 40
+            OPTIONAL MATCH (w)-[:SENT_TO]-(neighbor:Wallet)
+            WITH collect(w) + collect(neighbor) AS raw_nodes
+            UNWIND raw_nodes AS n
+            WITH DISTINCT n
+            WHERE n IS NOT NULL
             LIMIT $limit
+            RETURN
+                n.address    AS address,
+                n.label      AS label,
+                n.risk_score AS riskScore,
+                n.flagged    AS flagged,
+                n.tx_count   AS txCount,
+                n.balance_eth AS balanceEth
             """,
             limit=limit,
         )
@@ -287,6 +300,9 @@ async def simulate_exploit(request: Request = None):
 
     driver = request.app.state.neo4j
     async with driver.session() as session:
+        # Clear previous injected attackers to keep the demo clean
+        await session.run("MATCH (w:Wallet {injected: true}) DETACH DELETE w")
+
         await session.run(
             """
             MERGE (w:Wallet {address: $address})
@@ -317,7 +333,10 @@ async def simulate_exploit(request: Request = None):
                 MATCH (a:Wallet {address: $attacker})
                 MATCH (v:Wallet {address: $victim})
                 MERGE (a)-[r:SENT_TO {tx_hash: $tx_hash}]->(v)
-                SET r.value_eth = $value, r.gas_used = $gas
+                SET r.value_eth = $value, r.gas_used = $gas,
+                    v.flagged = true,
+                    v.risk_score = 0.88,
+                    v.injected = true
                 """,
                 attacker=attacker_address,
                 victim=victim,

@@ -490,9 +490,9 @@ const MOCK_GRAPH_DATA: GraphData = {
   nodes: Array.from({ length: 80 }, (_, i) => ({
     id: `0x${i.toString(16).padStart(40, "0")}`,
     address: `0x${i.toString(16).padStart(40, "0")}`,
-    label: (["defi_user", "bot", "whale", "exchange", "attacker"] as const)[i % 5],
-    riskScore: Math.random(),
-    flagged: Math.random() > 0.9,
+    label: (["defi_user", "bot", "whale", "exchange"] as const)[i % 4], // Removed "attacker" to maintain initial peace state
+    riskScore: 0, // Default to safe value (0) instead of random
+    flagged: false, // Default to safe value (false) instead of random
     txCount: Math.floor(Math.random() * 5000),
     balanceEth: Math.random() * 100,
   })),

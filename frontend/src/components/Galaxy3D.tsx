@@ -114,6 +114,11 @@ export default function Galaxy3D({
     return () => observer.disconnect();
   }, []);
 
+  // Clear stale attacker meshes when graph updates so we don't animate deleted objects
+  useEffect(() => {
+    _attackerMeshes.clear();
+  }, [graphData]);
+
   // Start/stop the animation loop when the component mounts/unmounts
   useEffect(() => {
     startPulsing();
