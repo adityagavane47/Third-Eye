@@ -144,11 +144,11 @@ python deploy_contract.py
 
 | Role | Member | Ownership |
 |------|--------|-----------|
-| Root & Infrastructure | Blueprint Lead | `.gitignore`, `.env.example`, `README.md`, `docker-compose.yml` |
-| Backend Architect | Member 3 | `backend/main.py`, `backend/database.py`, `backend/core/`, `scripts/` |
-| AI Analyst | Member 1 | `backend/agent/forensic_agent.py`, `backend/tasks.py` |
-| Web3 Enforcer | Member 2 | `contracts/ThirdEyeGuardian.sol`, `frontend/src/hooks/useShield.ts` |
-| UI/Viz Designer | Member 4 | `frontend/src/components/`, `frontend/src/pages/Dashboard.tsx` |
+| Root & Infrastructure | Aditya Gavane | `.gitignore`, `.env.example`, `README.md`, `docker-compose.yml` |
+| Backend Architect | Aditya Gavane | `backend/main.py`, `backend/database.py`, `backend/core/`, `scripts/` |
+| AI Analyst | Aayan Tamboli | `backend/agent/forensic_agent.py`, `backend/tasks.py` |
+| Web3 Enforcer | Aditya Gavane | `contracts/ThirdEyeGuardian.sol`, `frontend/src/hooks/useShield.ts` |
+| UI/Viz Designer | Aayan Tamboli | `frontend/src/components/`, `frontend/src/pages/Dashboard.tsx` |
 
 ---
 
