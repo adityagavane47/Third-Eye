@@ -8,7 +8,7 @@
  * Theme: Dark + Third Eye accent (#00D4FF)
  */
 
-import type { Chain } from "@privy-io/react-auth";
+import type { Chain } from "viem";
 import { PrivyProvider } from "@privy-io/react-auth";
 import Dashboard from "./pages/Dashboard";
 import { PrivyAuthProvider } from "./context/AuthContext";
@@ -18,7 +18,6 @@ import { PrivyAuthProvider } from "./context/AuthContext";
 export const BASE_SEPOLIA: Chain = {
   id: 84532,
   name: "Base Sepolia",
-  network: "base-sepolia",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: {
     default: { http: [import.meta.env.VITE_BASE_SEPOLIA_RPC ?? "https://sepolia.base.org"] },

@@ -33,22 +33,20 @@ async def lifespan(app: FastAPI):
     from database import get_driver
     logger.info("🛡️  Third Eye API starting up…")
     app.state.neo4j = get_driver()
-    
-    # Verify connectivity on startup
+
     try:
         await app.state.neo4j.verify_connectivity()
         logger.info("✅ Neo4j connection verified")
+        # Clean up previous demo exploits only if connected
+        async with app.state.neo4j.session() as session:
+            await session.run("MATCH (w:Wallet {injected: true}) DETACH DELETE w")
     except Exception as e:
-        logger.error(f"❌ Failed to verify Neo4j connection: {e}")
-    
-    # Clean up previous demo exploits
+        logger.warning(f"⚠️  Neo4j unavailable at startup (will retry on first request): {e}")
 
-    async with app.state.neo4j.session() as session:
-        await session.run("MATCH (w:Wallet {injected: true}) DETACH DELETE w")
-        
     yield
     logger.info("🔴  Third Eye API shutting down…")
     await app.state.neo4j.close()
+
 
 
 app = FastAPI(

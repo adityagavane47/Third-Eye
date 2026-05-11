@@ -14,12 +14,23 @@ export default defineConfig({
         global: true,
         process: true,
       },
+      // Prevent the plugin from injecting deprecated esbuildOptions
+      protocolImports: true,
     }),
   ],
   resolve: {
     alias: {
       "@": "/src",
     },
+  },
+  optimizeDeps: {
+    // Exclude polyfill shims from Rolldown pre-bundling to avoid
+    // the @esbuild-plugins/node-globals-polyfill "Not implemented" crash
+    exclude: [
+      "vite-plugin-node-polyfills/shims/buffer",
+      "vite-plugin-node-polyfills/shims/global",
+      "vite-plugin-node-polyfills/shims/process",
+    ],
   },
   server: {
     port: 5173,

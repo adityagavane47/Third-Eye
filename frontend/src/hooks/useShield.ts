@@ -83,7 +83,8 @@ export function useShield(): UseShieldReturn {
   const [txStatus, setTxStatus] = useState<ShieldTxStatus>("idle");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isOperator, setIsOperator] = useState(false);
+  // isOperator: backend determines operator role via OPERATOR_PRIVATE_KEY — always false in frontend context
+  const isOperator = false;
   const [blacklistCount, setBlacklistCount] = useState<bigint | null>(null);
 
   /**

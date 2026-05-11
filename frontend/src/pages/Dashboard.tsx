@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState } from "react";
 import Galaxy3D, { type GalaxyNode, type GraphData } from "../components/Galaxy3D";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
-import { useShield } from "../hooks/useShield";
 
 // Relative paths handled by Vite proxy
 const API_BASE = "";
@@ -18,17 +17,9 @@ export default function Dashboard() {
   const { authenticated, walletAddress, login, logout } = useAuth();
 
 
-  const {
-    blacklistWallet,
-    txStatus,
-    txHash,
-    error: shieldError,
-    resetStatus,
-  } = useShield();
 
   const [graphData, setGraphData] = useState<GraphData>(EMPTY_GRAPH);
   const [selectedNode, setSelectedNode] = useState<GalaxyNode | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alertMode, setAlertMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -66,23 +57,17 @@ export default function Dashboard() {
 
   const handleNodeSelect = (node: GalaxyNode) => {
     setSelectedNode(node);
-    setSidebarOpen(true);
   };
 
 
   const handleOpenPanel = () => {
-    if (selectedNode) {
-      setSidebarOpen(true);
-    } else if (graphData.nodes.length > 0) {
-
+    if (!selectedNode && graphData.nodes.length > 0) {
       const riskiest = [...graphData.nodes].sort((a, b) => b.riskScore - a.riskScore)[0];
       setSelectedNode(riskiest);
-      setSidebarOpen(true);
     }
   };
 
   const handleSidebarClose = () => {
-    setSidebarOpen(false);
     setSelectedNode(null);
   };
 
@@ -94,7 +79,6 @@ export default function Dashboard() {
       return;
     }
 
-    resetStatus();
     setSimulating(true);
     showToast("🚨 Injecting exploit wallet into the galaxy…", "info");
 
@@ -109,7 +93,6 @@ export default function Dashboard() {
       balanceEth: 0,
     };
     setSelectedNode(placeholderNode);
-    setSidebarOpen(true);
     setAlertMode(true);
 
     try {
@@ -210,16 +193,10 @@ export default function Dashboard() {
           <button onClick={handleOpenPanel} style={styles.refreshBtn}>🔍 Inspect Node</button>
           <button
             onClick={simulateExploit}
-            disabled={simulating || txStatus === "pending" || txStatus === "confirming"}
-            style={{ ...styles.exploitBtn, opacity: (simulating || txStatus === "pending" || txStatus === "confirming") ? 0.6 : 1 }}
+            disabled={simulating}
+            style={{ ...styles.exploitBtn, opacity: simulating ? 0.6 : 1 }}
           >
-            {txStatus === "confirming"
-              ? "⏳ Confirming on-chain…"
-              : txStatus === "pending"
-              ? "⏳ Sending tx…"
-              : simulating
-              ? "⏳ Injecting…"
-              : "💀 Simulate Exploit"}
+            {simulating ? "⏳ Injecting…" : "💀 Simulate Exploit"}
           </button>
           {authenticated ? (
             <div style={styles.walletGroup}>
@@ -275,21 +252,12 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Sidebar — absolute overlay on the right so it never fights the canvas width */}
-        {sidebarOpen && (
-          <div style={{
-            position: "absolute",
-            top: 0,
-            right: 0,
-            height: "100%",
-            width: 390,
-            zIndex: 50,
-            boxShadow: "-8px 0 32px rgba(0,0,0,0.6)",
-            animation: "slideIn 0.2s ease",
-          }}>
-            <Sidebar selectedNode={selectedNode} onClose={handleSidebarClose} />
-          </div>
-        )}
+        {/* Sidebar — Framer Motion AnimatePresence handles open/close */}
+        <Sidebar
+          selectedNode={selectedNode}
+          onClose={handleSidebarClose}
+          isExploitDetected={alertMode}
+        />
       </div>
 
       {/* CSS Animations */}
